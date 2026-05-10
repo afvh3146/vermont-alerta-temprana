@@ -53,7 +53,7 @@ Implementado en **Databricks Free Edition** sobre Unity Catalog:
 
 ## Pipeline
 
-XLS Phidias → 00_anonymizer → 01_bronze → 02_trusted → 02b_EDA → 03_model → 04_alerts
+    XLS Phidias → 00_anonymizer → 01_bronze → 02_trusted → 02b_EDA → 03_model → 04_alerts
 
 ---
 
