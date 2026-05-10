@@ -122,6 +122,25 @@ Para garantizar comparabilidad entre años lectivos con cambios curriculares:
 
 ---
 
+## Datos
+
+El archivo `datos_anonimizados.zip` contiene los datos de entrada del pipeline, anonimizados por `00_anonymizer`:
+
+    datos_anonimizados.zip
+    ├── 24_25/
+    │   ├── notas_7A.csv ... notas_9B.csv  ← Notas por sección
+    │   ├── asistencia.csv                  ← Asistencia consolidada
+    │   └── convivencia.csv                 ← Seguimientos F1 y F2
+    └── 25_26/
+        ├── notas_7A.csv ... notas_9B.csv
+        ├── asistencia.csv
+        ├── convivencia_tipo1.csv           ← Seguimientos F1
+        └── convivencia_tipo2.csv           ← Seguimientos F2
+
+Para reproducir: descomprime el ZIP, sube los archivos al volume `bronze/anon/` en Databricks y ejecuta los notebooks en orden desde `01_bronze_preparation`.
+
+---
+
 ## Trabajo futuro
 
 1. **Features históricas individuales**: prev_year_risk_level, prev_year_avg, is_repeating_grade
