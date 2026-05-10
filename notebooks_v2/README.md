@@ -16,22 +16,23 @@ Sistema de alerta temprana para estudiantes de Middle School (7°, 8° y 9°) de
 ## Arquitectura del datalake
 
 Implementado en **Databricks Free Edition** sobre Unity Catalog:
-/Volumes/workspace/vermont/
-├── bronze/
-│   ├── raw/24_25/           ← XLS originales 2024-25
-│   ├── raw/25_26/           ← XLS originales 2025-26
-│   ├── anon/24_25/          ← Datos anonimizados (CSV)
-│   ├── anon/25_26/          ← Datos anonimizados (CSV)
-│   └── prepared/            ← Parquet con asignaturas unificadas
-├── trusted/
-│   ├── train_dataset/       ← 24-25: T1+T2 features + risk_level target
-│   └── predict_dataset/     ← 25-26: T1+T2 features + T3 parcial
-├── silver/
-│   ├── eda_*/               ← Resultados EDA con SparkSQL
-│   ├── early_warning_model/ ← Modelo Random Forest entrenado
-│   ├── predictions_25_26/   ← Predicciones sobre año actual
-│   └── early_alerts_25_26/  ← Alertas finales con categorías
-└── privado/                 ← Tabla de mapeo real (nunca sale de Databricks)
+
+    /Volumes/workspace/vermont/
+    ├── bronze/
+    │   ├── raw/24_25/           ← XLS originales 2024-25
+    │   ├── raw/25_26/           ← XLS originales 2025-26
+    │   ├── anon/24_25/          ← Datos anonimizados (CSV)
+    │   ├── anon/25_26/          ← Datos anonimizados (CSV)
+    │   └── prepared/            ← Parquet con asignaturas unificadas
+    ├── trusted/
+    │   ├── train_dataset/       ← 24-25: T1+T2 features + risk_level target
+    │   └── predict_dataset/     ← 25-26: T1+T2 features + T3 parcial
+    ├── silver/
+    │   ├── eda_*/               ← Resultados EDA con SparkSQL
+    │   ├── early_warning_model/ ← Modelo Random Forest entrenado
+    │   ├── predictions_25_26/   ← Predicciones sobre año actual
+    │   └── early_alerts_25_26/  ← Alertas finales con categorías
+    └── privado/                 ← Tabla de mapeo real (nunca sale de Databricks)
 
 ---
 
