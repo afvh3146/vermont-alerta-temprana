@@ -9,9 +9,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 import numpy as np
 
-# ─────────────────────────────────────────────
-# CONFIGURACIÓN
-# ─────────────────────────────────────────────
 st.set_page_config(
     page_title="Vermont Early Warning System",
     page_icon="🏫",
@@ -78,9 +75,6 @@ ALERT_ACCION = {
     "Sin Riesgo":        "Seguimiento rutinario",
 }
 
-# ─────────────────────────────────────────────
-# CARGA DE DATOS
-# ─────────────────────────────────────────────
 @st.cache_data(ttl=3600)
 def load_data():
     df = pd.read_csv(DATA_URL)
@@ -92,7 +86,7 @@ def load_data():
 df = load_data()
 
 # ─────────────────────────────────────────────
-# SIDEBAR — FILTROS
+# SIDEBAR
 # ─────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 🏫 Vermont EWS")
@@ -137,10 +131,7 @@ with st.sidebar:
         if checked:
             cats_activas.append(cat)
 
-    if cats_activas:
-        df_filtrado = df_g[df_g["categoria"].isin(cats_activas)]
-    else:
-        df_filtrado = df_g.copy()
+    df_filtrado = df_g[df_g["categoria"].isin(cats_activas)] if cats_activas else df_g.copy()
 
     st.divider()
 
@@ -170,14 +161,14 @@ def get_color(cat):
 def get_opacity(cat):
     if cat_highlight == "Ninguna":
         return 0.85
-    return 0.92 if cat == cat_highlight else 0.25
+    return 0.92 if cat == cat_highlight else 0.2
 
 def build_hover(row):
     lines = [
         f"<b>ID: {row['student_id']}</b>",
         f"Grado: {row['grado_label']}",
         f"Categoría: {ALERT_EMOJI.get(row['categoria'],'')} {row['categoria']}",
-        f"Confianza modelo: {row['confianza']*100:.0f}%",
+        f"Prob. riesgo: {row['proba_critical']*100:.0f}%",
         f"LSC: {'✓ Sí' if row.get('marcador_LSC', 0) == 1 else 'No'}",
         "──────────────",
         "<b>Materias bajo 4.0:</b>"
@@ -214,7 +205,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 
 # ══════════════════════════════════════════════
-# TAB 1 — SEMÁFORO GENERAL
+# TAB 1
 # ══════════════════════════════════════════════
 with tab1:
 
@@ -222,30 +213,22 @@ with tab1:
     cols_m = st.columns(4)
     for i, cat in enumerate(ALERT_ORDER):
         n = (df_filtrado["categoria"] == cat).sum()
-        color = ALERT_COLORS[cat]
+        color = get_color(cat)
         desc  = ALERT_DESC[cat]
         cols_m[i].markdown(f"""
         <div style="margin-bottom:8px">
-            <span style="font-size:1.8em; font-weight:700;
-                         color:{color}">{n}</span>
+            <span style="font-size:1.8em; font-weight:700; color:{color}">{n}</span>
             <span style="font-size:1em; color:{color}; margin-left:6px">
                 {ALERT_EMOJI[cat]} {cat}
             </span><br>
-            <span style="font-size:0.78em; color:#666; line-height:1.3">
-                {desc}
-            </span>
+            <span style="font-size:0.78em; color:#666; line-height:1.3">{desc}</span>
         </div>
         """, unsafe_allow_html=True)
 
     st.divider()
 
-    # ── Scatter ──
-    st.markdown("#### Confianza del modelo vs. Materias bajo 4.0")
-    st.caption(
-        "Eje X: qué tan seguro está el modelo sobre su predicción · "
-        "Eje Y: materias con nota acumulada bajo 4.0 · "
-        "◆ = estudiante LSC"
-    )
+    # ── SCATTER ──
+    st.markdown("#### Probabilidad de riesgo vs. Materias en bajo rendimiento")
 
     df_sc = df_filtrado.copy()
     df_sc["hover_text"] = df_sc.apply(build_hover, axis=1)
@@ -260,14 +243,13 @@ with tab1:
         opacity = get_opacity(cat)
         size    = 13 if (cat_highlight == "Ninguna" or cat == cat_highlight) else 9
 
-        # Un solo trazo por categoría — símbolo varía por LSC
-        symbols = sub["marcador_LSC"].map({1: "diamond", 0: "circle"})
+        symbols  = sub["marcador_LSC"].map({1: "diamond", 0: "circle"})
         border_w = sub["marcador_LSC"].map({1: 2.5, 0: 0.8})
         border_c = sub["marcador_LSC"].map({1: "#000000", 0: "white"})
         sizes    = sub["marcador_LSC"].map({1: size + 3, 0: size})
 
         fig_sc.add_trace(go.Scatter(
-            x=sub["confianza"],
+            x=sub["proba_critical"],
             y=sub["n_bajo_acumulada"],
             mode="markers",
             name=f"{ALERT_EMOJI[cat]} {cat}",
@@ -285,41 +267,55 @@ with tab1:
 
     # Líneas de referencia
     fig_sc.add_vline(
-        x=0.50, line_dash="dash", line_color="#888",
-        annotation_text="50% confianza",
+        x=0.30, line_dash="dash", line_color="#e74c3c", line_width=1.5,
+        annotation_text="Umbral de riesgo (0.30)",
         annotation_position="top right",
-        annotation_font_color="#888"
+        annotation_font_color="#e74c3c",
+        annotation_font_size=11
     )
     fig_sc.add_hline(
-        y=2.5, line_dash="dash", line_color="#888",
+        y=2.5, line_dash="dash", line_color="#888", line_width=1.5,
         annotation_text="3 materias = pierde el año",
-        annotation_position="right"
+        annotation_position="right",
+        annotation_font_size=11
     )
 
     # Etiquetas de cuadrante
-    fig_sc.add_annotation(x=0.25, y=9.5, text="🟠 Punto Ciego",
+    fig_sc.add_annotation(x=0.15, y=9.3, text="🟠 Punto ciego",
         showarrow=False, font=dict(color="#e67e22", size=11), opacity=0.8)
-    fig_sc.add_annotation(x=0.78, y=9.5, text="🔴 Riesgo Confirmado",
+    fig_sc.add_annotation(x=0.75, y=9.3, text="🔴 Riesgo confirmado",
         showarrow=False, font=dict(color="#e74c3c", size=11), opacity=0.8)
-    fig_sc.add_annotation(x=0.25, y=0.4, text="🟢 Sin Riesgo",
-        showarrow=False, font=dict(color="#2ecc71", size=11), opacity=0.8)
-    fig_sc.add_annotation(x=0.78, y=0.4, text="🔵 Riesgo Teórico",
+    fig_sc.add_annotation(x=0.15, y=0.3, text="🟢 Sin riesgo",
+        showarrow=False, font=dict(color="#27ae60", size=11), opacity=0.8)
+    fig_sc.add_annotation(x=0.75, y=0.3, text="🔵 Riesgo teórico",
         showarrow=False, font=dict(color="#3498db", size=11), opacity=0.8)
 
     fig_sc.update_layout(
         height=520,
-        xaxis_title="Confianza del modelo",
-        yaxis_title="N° materias bajo 4.0",
-        xaxis=dict(range=[-0.02, 1.05], gridcolor="#f0f0f0",
-                   tickformat=".0%"),
+        xaxis_title="Probabilidad de riesgo (modelo)",
+        yaxis_title="N° materias en bajo rendimiento",
+        xaxis=dict(
+            range=[-0.02, 1.02],
+            gridcolor="#f0f0f0",
+            tickformat=".0%",
+            tickvals=[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        ),
         yaxis=dict(range=[-0.5, 10.5], gridcolor="#f0f0f0", dtick=1),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02,
-                    font=dict(size=12)),
-        margin=dict(l=40, r=20, t=60, b=50),
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02,
+            font=dict(size=12)
+        ),
+        margin=dict(l=50, r=20, t=60, b=50),
         plot_bgcolor="white", paper_bgcolor="white",
         hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="#ddd")
     )
     st.plotly_chart(fig_sc, use_container_width=True)
+
+    st.caption(
+        "◆ = estudiante con LSC (borde negro) · ● = sin LSC · "
+        "Nota: prob. de riesgo muestra solo clase crítica; estudiantes en recuperación "
+        "pueden aparecer a la izquierda del umbral y aun así ser Riesgo Confirmado."
+    )
 
     # Distribución
     col_bar, col_grade = st.columns(2)
@@ -391,7 +387,7 @@ with tab1:
             st.plotly_chart(fig_sec, use_container_width=True)
 
 # ══════════════════════════════════════════════
-# TAB 2 — DETALLE POR ESTUDIANTE
+# TAB 2
 # ══════════════════════════════════════════════
 with tab2:
 
@@ -468,6 +464,7 @@ with tab2:
             st.markdown(f"**Promedio T2:** {row['avg_T2']:.2f}")
             st.markdown(f"**Tendencia:** {row['tendencia_general']:+.2f}")
             st.markdown(f"**Materias bajo 4.0:** {int(row['n_bajo_acumulada'])}")
+            st.markdown(f"**Prob. riesgo:** {row['proba_critical']*100:.0f}%")
             st.markdown(f"**Confianza modelo:** {row['confianza']*100:.0f}%")
             st.markdown(f"**T3 confirma riesgo:** {'Sí' if row['t3_confirma_riesgo'] else 'No'}")
             lsc = "✓ Sí" if row.get("marcador_LSC", 0) == 1 else "No"
@@ -545,7 +542,7 @@ with tab2:
         st.caption("⚠️ T3 parcial ya bajo 4.0 · 🔸 T3 predicho bajo 4.0")
 
 # ══════════════════════════════════════════════
-# TAB 3 — POR ASIGNATURA
+# TAB 3
 # ══════════════════════════════════════════════
 with tab3:
 
@@ -614,7 +611,7 @@ with tab3:
         st.plotly_chart(fig_riesgo, use_container_width=True)
 
 # ══════════════════════════════════════════════
-# TAB 4 — MODELO PREDICTIVO
+# TAB 4
 # ══════════════════════════════════════════════
 with tab4:
 
@@ -696,9 +693,6 @@ with tab4:
         })
         st.dataframe(df_inc.head(20), use_container_width=True, hide_index=True)
 
-# ─────────────────────────────────────────────
-# FOOTER
-# ─────────────────────────────────────────────
 st.divider()
 st.markdown(
     "<div style='text-align:center; color:#999; font-size:0.8em'>"
