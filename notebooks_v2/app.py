@@ -526,181 +526,200 @@ with tab2:
 # ══════════════════════════════════════════════
 with tab3:
 
-    # ── Gráfico 1: Estudiantes en riesgo por materia (actual vs predicho) ──
-    st.markdown("#### Materias con más estudiantes en riesgo")
-    st.caption("Actual = nota acumulada T1·0.3 + T2·0.3 + T3·0.4 < 4.0 · Predicho = T3 predicho por el modelo")
-
-    riesgo_rows = []
-    for s in SUBJECTS:
-        # Actual: nota acumulada < 4.0
-        n_actual = 0
-        for _, row_s in df_filtrado.iterrows():
-            t1 = row_s.get(f"{s}_T1", np.nan)
-            t2 = row_s.get(f"{s}_T2", np.nan)
-            t3 = row_s.get(f"{s}_T3", np.nan)
-            if not any(pd.isna([t1, t2, t3])):
-                acum = t1*0.30 + t2*0.30 + t3*0.40
-                if acum < 4.0:
-                    n_actual += 1
-
-        # Predicho: T3 predicho < 4.0
-        col_pred = f"{s}_T3_pred"
-        col_p10  = f"{s}_T3_p10"
-        col_p90  = f"{s}_T3_p90"
-        if col_pred in df_filtrado.columns:
-            sub_pred = df_filtrado[col_pred].dropna()
-            n_pred = (sub_pred < 4.0).sum()
-            # Incertidumbre promedio del intervalo para los que están en riesgo
-            mask_pred = df_filtrado[col_pred] < 4.0
-            if col_p10 in df_filtrado.columns and col_p90 in df_filtrado.columns:
-                amp = (df_filtrado.loc[mask_pred, col_p90] -
-                       df_filtrado.loc[mask_pred, col_p10]).mean()
-                amp = round(amp, 2) if not pd.isna(amp) else 0
-            else:
-                amp = 0
-        else:
-            n_pred = 0
-            amp = 0
-
-        n_tot = df_filtrado[f"{s}_T1"].notna().sum()
-        if n_tot > 0:
-            riesgo_rows.append({
-                "Materia":    SUBJECT_LABELS[s],
-                "Actual":     int(n_actual),
-                "Predicho":   int(n_pred),
-                "Amplitud IC": amp,
-                "N total":    int(n_tot)
-            })
-
-    df_riesgo = pd.DataFrame(riesgo_rows).sort_values("Actual", ascending=False)
-
-    if not df_riesgo.empty:
-        fig_riesgo = go.Figure()
-
-        # Serie actual
-        fig_riesgo.add_trace(go.Bar(
-            name="Actual (acumulada)",
-            x=df_riesgo["Materia"],
-            y=df_riesgo["Actual"],
-            marker_color="#e74c3c",
-            opacity=0.9,
-        ))
-
-        # Serie predicha con barra de error
-        fig_riesgo.add_trace(go.Bar(
-            name="Predicho (T3 modelo)",
-            x=df_riesgo["Materia"],
-            y=df_riesgo["Predicho"],
-            marker_color="#3498db",
-            opacity=0.7,
-            error_y=dict(
-                type="data",
-                array=df_riesgo["Amplitud IC"].tolist(),
-                visible=True,
-                color="#1a6ea8",
-                thickness=1.5,
-                width=4
-            )
-        ))
-
-        fig_riesgo.add_hline(
-            y=df_filtrado["n_bajo_acumulada"].mean(),
-            line_dash="dot", line_color="#888",
-            annotation_text=f"Promedio grupo: {df_filtrado['n_bajo_acumulada'].mean():.1f}",
-            annotation_position="right", annotation_font_size=10
-        )
-
-        fig_riesgo.update_layout(
-            height=420,
-            barmode="group",
-            xaxis_title="Materia",
-            yaxis_title="N° estudiantes bajo 4.0",
-            xaxis=dict(tickangle=-30),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02),
-            plot_bgcolor="white", paper_bgcolor="white",
-            yaxis=dict(gridcolor="#f0f0f0"),
-            margin=dict(l=40, r=80, t=40, b=80)
-        )
-        st.plotly_chart(fig_riesgo, use_container_width=True)
-        st.caption(
-            "🔴 Actual: estudiantes con nota acumulada < 4.0 hoy · "
-            "🔵 Predicho: estudiantes con T3 predicho < 4.0 · "
-            "Barras de error = amplitud del intervalo P10–P90 del modelo"
-        )
-
-    st.divider()
-
-    # ── Gráfico 2: Promedio por materia (T1, T2, T3 predicho) ──
     st.markdown("#### Promedio del grupo por asignatura")
-    st.caption("Compara la evolución trimestral y la predicción T3 frente al mínimo de aprobación")
+    st.caption("Selecciona los trimestres que quieres ver")
 
+    # Selector de trimestres
+    col_t1, col_t2, col_t3p, col_t3a = st.columns(4)
+    with col_t1:
+        show_t1 = st.checkbox("T1", value=True)
+    with col_t2:
+        show_t2 = st.checkbox("T2", value=True)
+    with col_t3p:
+        show_t3p = st.checkbox("T3 predicho", value=True)
+    with col_t3a:
+        show_t3a = st.checkbox("T3 actual", value=True)
+
+    # Calcular promedios por materia
     subs_data = []
     for s in SUBJECTS:
-        for t, col in [("T1", f"{s}_T1"), ("T2", f"{s}_T2"),
-                       ("T3 pred.", f"{s}_T3_pred")]:
+        label = SUBJECT_LABELS[s]
+        for show, t, col, color, solid in [
+            (show_t1,  "T1",          f"{s}_T1",      "#3498db", True),
+            (show_t2,  "T2",          f"{s}_T2",      "#9b59b6", True),
+            (show_t3p, "T3 predicho", f"{s}_T3_pred", "#e74c3c", False),
+            (show_t3a, "T3 actual",   f"{s}_T3",      "#e67e22", True),
+        ]:
             if col in df_filtrado.columns:
                 vals = df_filtrado[col].dropna()
                 if not vals.empty:
                     subs_data.append({
-                        "Materia":   SUBJECT_LABELS[s],
+                        "Materia":   label,
                         "Trimestre": t,
-                        "Promedio":  round(vals.mean(), 2)
+                        "Promedio":  round(vals.mean(), 2),
+                        "Activo":    show,
+                        "Color":     color,
+                        "Sólido":    solid,
                     })
 
     if subs_data:
         df_subs = pd.DataFrame(subs_data)
 
-        fig_subs = px.bar(
-            df_subs, x="Materia", y="Promedio",
-            color="Trimestre", barmode="group",
-            color_discrete_map={"T1": "#3498db", "T2": "#9b59b6",
-                                 "T3 pred.": "#e74c3c"},
-            height=420
-        )
+        trimestres_config = [
+            ("T1",          "#3498db", True),
+            ("T2",          "#9b59b6", True),
+            ("T3 predicho", "#e74c3c", False),
+            ("T3 actual",   "#e67e22", True),
+        ]
+        show_map = {
+            "T1":          show_t1,
+            "T2":          show_t2,
+            "T3 predicho": show_t3p,
+            "T3 actual":   show_t3a,
+        }
+
+        fig_subs = go.Figure()
+
+        for t, color, solid in trimestres_config:
+            sub = df_subs[df_subs["Trimestre"] == t]
+            if sub.empty:
+                continue
+            activo     = show_map[t]
+            color_real = color if activo else "#cccccc"
+            opac       = 0.9 if activo else 0.3
+
+            if solid:
+                fig_subs.add_trace(go.Bar(
+                    name=t,
+                    x=sub["Materia"],
+                    y=sub["Promedio"],
+                    marker_color=color_real,
+                    opacity=opac,
+                    text=sub["Promedio"].astype(str),
+                    textposition="outside",
+                    textfont=dict(size=9),
+                ))
+            else:
+                fig_subs.add_trace(go.Scatter(
+                    name=t,
+                    x=sub["Materia"],
+                    y=sub["Promedio"],
+                    mode="markers+text",
+                    marker=dict(
+                        color=color_real, size=12, symbol="diamond",
+                        line=dict(width=1.5, color="white"),
+                        opacity=opac
+                    ),
+                    text=sub["Promedio"].astype(str),
+                    textposition="top center",
+                    textfont=dict(size=9),
+                ))
+
         fig_subs.add_hline(
             y=4.0, line_dash="dash", line_color="red", line_width=1.5,
             annotation_text="Mín. aprobación (4.0)",
-            annotation_font_color="red"
+            annotation_font_color="red", annotation_font_size=11
         )
         fig_subs.update_layout(
-            plot_bgcolor="white", paper_bgcolor="white",
-            yaxis=dict(range=[0, 7.5], gridcolor="#f0f0f0"),
+            height=460,
+            barmode="group",
+            xaxis_title="Materia",
+            yaxis_title="Promedio",
+            yaxis=dict(range=[0, 7.8], gridcolor="#f0f0f0"),
             xaxis=dict(tickangle=-30),
             legend=dict(orientation="h", yanchor="bottom", y=1.02),
-            margin=dict(l=40, r=20, t=40, b=80)
+            plot_bgcolor="white", paper_bgcolor="white",
+            margin=dict(l=40, r=20, t=50, b=80)
         )
         st.plotly_chart(fig_subs, use_container_width=True)
 
-        # Tabla resumen: materias bajo el mínimo
-        st.markdown("#### Materias con promedio grupal bajo 4.0")
-        df_t2 = df_subs[df_subs["Trimestre"] == "T2"].copy()
-        df_t3 = df_subs[df_subs["Trimestre"] == "T3 pred."].copy()
-        df_resumen = df_t2.merge(
-            df_t3[["Materia", "Promedio"]].rename(columns={"Promedio": "Prom. T3 pred."}),
-            on="Materia", how="left"
-        )
-        df_resumen = df_resumen.rename(columns={"Promedio": "Prom. T2"})
-        df_resumen["Tendencia"] = (df_resumen["Prom. T3 pred."] - df_resumen["Prom. T2"]).round(2)
-        df_resumen["Estado T2"] = df_resumen["Prom. T2"].apply(
-            lambda x: "⚠️ Bajo mínimo" if x < 4.0 else "✓ OK"
-        )
-        df_resumen["Estado T3 pred."] = df_resumen["Prom. T3 pred."].apply(
-            lambda x: "🔸 Riesgo" if not pd.isna(x) and x < 4.0 else "✓ OK"
-        )
-        df_bajo = df_resumen[
-            (df_resumen["Prom. T2"] < 4.0) |
-            (df_resumen["Prom. T3 pred."] < 4.0)
-        ].sort_values("Prom. T2")
+    st.divider()
 
-        if not df_bajo.empty:
-            st.dataframe(
-                df_bajo[["Materia", "Prom. T2", "Estado T2",
-                          "Prom. T3 pred.", "Estado T3 pred.", "Tendencia"]],
-                use_container_width=True, hide_index=True
+    # ── Barras horizontales: promedio acumulado por materia ──
+    st.markdown("#### Materias con promedio acumulado bajo el mínimo")
+    st.caption(
+        "Promedio acumulado = T1×0.30 + T2×0.30 + T3×0.40 · "
+        "Solo muestra materias en riesgo o cerca del mínimo (< 4.5)"
+    )
+
+    resumen_rows = []
+    for s in SUBJECTS:
+        col_t1s = f"{s}_T1"
+        col_t2s = f"{s}_T2"
+        col_t3s = f"{s}_T3"
+        col_t3p = f"{s}_T3_pred"
+
+        if not all(c in df_filtrado.columns for c in [col_t1s, col_t2s, col_t3s]):
+            continue
+
+        # Promedio acumulado del grupo
+        df_sub = df_filtrado[[col_t1s, col_t2s, col_t3s]].dropna()
+        if df_sub.empty:
+            continue
+
+        df_sub["acum"] = df_sub[col_t1s]*0.30 + df_sub[col_t2s]*0.30 + df_sub[col_t3s]*0.40
+        prom_acum = round(df_sub["acum"].mean(), 2)
+
+        # Promedio predicho T3
+        prom_t3p = round(df_filtrado[col_t3p].mean(), 2) if col_t3p in df_filtrado.columns else None
+
+        resumen_rows.append({
+            "Materia":        SUBJECT_LABELS[s],
+            "Prom. acumulado": prom_acum,
+            "Prom. T3 pred.":  prom_t3p,
+        })
+
+    df_res = pd.DataFrame(resumen_rows)
+    df_res_show = df_res[df_res["Prom. acumulado"] < 4.5].sort_values("Prom. acumulado")
+
+    if not df_res_show.empty:
+        fig_horiz = go.Figure()
+
+        fig_horiz.add_trace(go.Bar(
+            name="Promedio acumulado",
+            y=df_res_show["Materia"],
+            x=df_res_show["Prom. acumulado"],
+            orientation="h",
+            marker_color=[
+                "#e74c3c" if v < 4.0 else "#f39c12"
+                for v in df_res_show["Prom. acumulado"]
+            ],
+            text=df_res_show["Prom. acumulado"].astype(str),
+            textposition="outside"
+        ))
+
+        # Puntos T3 predicho
+        fig_horiz.add_trace(go.Scatter(
+            name="T3 predicho (grupo)",
+            y=df_res_show["Materia"],
+            x=df_res_show["Prom. T3 pred."],
+            mode="markers",
+            marker=dict(
+                color="#3498db", size=12, symbol="diamond",
+                line=dict(width=1.5, color="white")
             )
-        else:
-            st.success("Ninguna materia tiene promedio grupal bajo 4.0 en el grupo seleccionado.")
+        ))
 
+        fig_horiz.add_vline(
+            x=4.0, line_dash="dash", line_color="red", line_width=1.5,
+            annotation_text="4.0 mínimo",
+            annotation_font_color="red",
+            annotation_position="top right"
+        )
+        fig_horiz.update_layout(
+            height=max(200, len(df_res_show) * 55 + 80),
+            xaxis_title="Promedio acumulado",
+            xaxis=dict(range=[0, 7.5], gridcolor="#f0f0f0"),
+            yaxis_title="",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02),
+            plot_bgcolor="white", paper_bgcolor="white",
+            margin=dict(l=10, r=80, t=40, b=40)
+        )
+        st.plotly_chart(fig_horiz, use_container_width=True)
+        st.caption("🔴 Bajo mínimo · 🟠 Cerca del mínimo (< 4.5) · ◆ T3 predicho del grupo")
+
+    else:
+        st.success("Ninguna materia tiene promedio acumulado bajo o cerca del mínimo en el grupo seleccionado.")
 # ══════════════════════════════════════════════
 # TAB 4 — MODELO PREDICTIVO
 # ══════════════════════════════════════════════
