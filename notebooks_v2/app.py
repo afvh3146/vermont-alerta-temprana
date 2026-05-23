@@ -600,18 +600,23 @@ with tab3:
                     textfont=dict(size=9),
                 ))
             else:
-                fig_subs.add_trace(go.Scatter(
+                fig_subs.add_trace(go.Bar(
                     name=t,
                     x=sub["Materia"],
                     y=sub["Promedio"],
-                    mode="markers+text",
                     marker=dict(
-                        color=color_real, size=12, symbol="diamond",
-                        line=dict(width=1.5, color="white"),
-                        opacity=opac
+                        color=color_real,
+                        opacity=opac,
+                        pattern=dict(
+                            shape="/",
+                            size=6,
+                            solidity=0.4,
+                            fgcolor=color_real,
+                            bgcolor="white"
+                        )
                     ),
                     text=sub["Promedio"].astype(str),
-                    textposition="top center",
+                    textposition="outside",
                     textfont=dict(size=9),
                 ))
 
