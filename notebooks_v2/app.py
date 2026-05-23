@@ -126,7 +126,7 @@ col_grado, col_seccion = st.columns([2, 1])
 with col_grado:
     grado_sel = st.radio(
         "Grado",
-        ["Todos", "7°", "8°", "9°"],
+        ["Todos", "X", "Y", "Z"],
         horizontal=True,
         label_visibility="collapsed"
     )
