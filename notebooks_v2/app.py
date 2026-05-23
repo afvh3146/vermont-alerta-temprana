@@ -455,7 +455,7 @@ with tab2:
 
         col_radar, col_mat = st.columns([1, 1])
 
-       with col_radar:
+        with col_radar:
             # Materias en inglés por grado
             grade = int(row.get("grade", 9))
             if grade == 9:
