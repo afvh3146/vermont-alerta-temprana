@@ -455,42 +455,179 @@ with tab2:
 
         col_radar, col_mat = st.columns([1, 1])
 
-        with col_radar:
-            subs_disp = [s for s in SUBJECTS
+       with col_radar:
+            # Materias en inglés por grado
+            grade = int(row.get("grade", 9))
+            if grade == 9:
+                materias_ingles = {
+                    "Science", "Mathematics", "Financial_Maths",
+                    "ICT_STEM", "English", "Mandarin", "Research_Methodology"
+                }
+            else:  # 7 y 8
+                materias_ingles = {
+                    "Science", "Mathematics", "Financial_Maths",
+                    "ICT_STEM", "I_and_S", "English", "Mandarin"
+                }
+
+            # Orden por familias
+            SUBJECTS_RADAR_9 = [
+                "Science", "Mathematics", "Financial_Maths", "ICT_STEM",
+                "I_and_S", "Research_Methodology", "English", "Mandarin",
+                "Lengua_Castellana", "Physical_Education"
+            ]
+            SUBJECTS_RADAR_78 = [
+                "Science", "Mathematics", "Financial_Maths", "ICT_STEM",
+                "I_and_S", "English", "Mandarin",
+                "Lengua_Castellana", "Physical_Education"
+            ]
+            subjects_orden = SUBJECTS_RADAR_9 if grade == 9 else SUBJECTS_RADAR_78
+
+            subs_disp = [s for s in subjects_orden
                          if not pd.isna(row.get(f"{s}_T1", np.nan))]
+
             if subs_disp:
+                # Toggle contraste inglés
+                highlight_ingles = st.checkbox(
+                    "Resaltar materias en inglés",
+                    value=False,
+                    key=f"ing_{sel_id}"
+                )
+
                 labels = [SUBJECT_LABELS[s] for s in subs_disp]
                 t1_v   = [row.get(f"{s}_T1", 0) or 0 for s in subs_disp]
                 t2_v   = [row.get(f"{s}_T2", 0) or 0 for s in subs_disp]
                 t3a_v  = [row.get(f"{s}_T3", 0) or 0 for s in subs_disp]
                 t3p_v  = [row.get(f"{s}_T3_pred", 0) or 0 for s in subs_disp]
 
+                # Colores por familia
+                family_colors = {
+                    "Science":              "#4a90a4",
+                    "Mathematics":          "#5a8a5a",
+                    "Financial_Maths":      "#5a8a5a",
+                    "ICT_STEM":             "#5a8a5a",
+                    "I_and_S":              "#8a7a5a",
+                    "Research_Methodology": "#a0724a",
+                    "English":              "#8a6a8a",
+                    "Mandarin":             "#8a6a8a",
+                    "Lengua_Castellana":    "#8a7a5a",
+                    "Physical_Education":   "#a0724a",
+                }
+
+                # Si contraste activo: gris para las que no son inglés
+                def punto_color(s):
+                    if not highlight_ingles:
+                        return family_colors.get(s, "#888")
+                    return family_colors.get(s, "#888") if s in materias_ingles else "#cccccc"
+
+                marker_colors = [punto_color(s) for s in subs_disp]
+                marker_opac   = [
+                    1.0 if (not highlight_ingles or s in materias_ingles) else 0.3
+                    for s in subs_disp
+                ]
+
                 fig_radar = go.Figure()
-                for vals, name, clr, dash in [
-                    (t1_v,  "T1 real",   "#5dade2", "solid"),
-                    (t2_v,  "T2 real",   "#1a5276", "solid"),
-                    (t3a_v, "T3 actual", "#27ae60", "solid"),
-                    (t3p_v, "T3 pred.",  "#27ae60", "dot"),
-                ]:
+
+                # Sombreado familias
+                families_def = [
+                    ("🔬 Ciencias",    ["Science"],
+                     "rgba(74,144,164,0.10)", "#4a90a4"),
+                    ("🔢 Matemáticas", ["Mathematics","Financial_Maths","ICT_STEM"],
+                     "rgba(90,138,90,0.10)",  "#5a8a5a"),
+                    ("🌐 Humanidades", ["I_and_S","Lengua_Castellana"],
+                     "rgba(138,122,90,0.10)", "#8a7a5a"),
+                    ("🏃 Bienestar",   ["Physical_Education","Research_Methodology"],
+                     "rgba(160,114,74,0.10)", "#a0724a"),
+                    ("🌍 Lenguas",     ["English","Mandarin"],
+                     "rgba(138,106,138,0.10)","#8a6a8a"),
+                ]
+                for fname, fmats, fcolor, fborder in families_def:
+                    fmats_disp = [SUBJECT_LABELS[s] for s in fmats if s in subs_disp]
+                    if not fmats_disp:
+                        continue
+                    r_sec   = [7] * len(fmats_disp)
+                    theta_s = fmats_disp + [fmats_disp[0]]
+                    r_s     = r_sec + [0]
+                    # Si contraste activo y ninguna materia de esta familia es inglés → gris
+                    if highlight_ingles and not any(s in materias_ingles for s in fmats if s in subs_disp):
+                        fcolor  = "rgba(200,200,200,0.06)"
+                        fborder = "#cccccc"
                     fig_radar.add_trace(go.Scatterpolar(
-                        r=vals + [vals[0]],
-                        theta=labels + [labels[0]],
-                        fill="toself" if dash == "solid" else "none",
-                        name=name,
-                        line=dict(color=clr, dash=dash),
-                        fillcolor=clr if dash == "solid" else "rgba(0,0,0,0)",
-                        opacity=0.25 if dash == "solid" else 0.9
+                        r=r_s, theta=theta_s,
+                        fill='toself', fillcolor=fcolor,
+                        line=dict(color=fborder, width=0.5, dash='dot'),
+                        name=fname, hoverinfo='skip', showlegend=True
                     ))
+
+                # Línea mínimo
                 fig_radar.add_trace(go.Scatterpolar(
                     r=[4.0] * (len(labels) + 1),
                     theta=labels + [labels[0]],
-                    mode="lines", name="Mín. aprobación",
-                    line=dict(color="red", dash="dash", width=1.5)
+                    mode='lines', name='Mínimo (4.0)',
+                    line=dict(color='#c0392b', dash='dash', width=1.5),
+                    showlegend=True
                 ))
+
+                # Líneas del estudiante — T1, T2, T3 actual, T3 pred
+                for vals_s, name_s, clr_s, dash_s, fill_s in [
+                    (t1_v,  "T1 real",   "#5dade2", "solid", "toself"),
+                    (t2_v,  "T2 real",   "#1a5276", "solid", "toself"),
+                    (t3a_v, "T3 actual", "#27ae60", "solid", "toself"),
+                    (t3p_v, "T3 pred.",  "#27ae60", "dot",   "none"),
+                ]:
+                    opac = 0.25 if dash_s == "solid" else 0.9
+                    # Si contraste activo, usar valores solo donde aplica
+                    r_vals = []
+                    for i, s in enumerate(subs_disp):
+                        v = vals_s[i]
+                        if highlight_ingles and s not in materias_ingles:
+                            r_vals.append(v * 0.3)  # desvanecer
+                        else:
+                            r_vals.append(v)
+
+                    fig_radar.add_trace(go.Scatterpolar(
+                        r=r_vals + [r_vals[0]],
+                        theta=labels + [labels[0]],
+                        fill=fill_s,
+                        fillcolor=clr_s if dash_s == "solid" else "rgba(0,0,0,0)",
+                        name=name_s,
+                        line=dict(color=clr_s, dash=dash_s, width=2),
+                        opacity=opac,
+                        showlegend=True
+                    ))
+
+                # Puntos
+                fig_radar.add_trace(go.Scatterpolar(
+                    r=t2_v,
+                    theta=labels,
+                    mode='markers',
+                    marker=dict(
+                        color=marker_colors,
+                        size=11,
+                        opacity=marker_opac,
+                        line=dict(color='white', width=1.5)
+                    ),
+                    showlegend=False,
+                    hovertemplate='<b>%{theta}</b><br>T2: %{r}<extra></extra>'
+                ))
+
                 fig_radar.update_layout(
-                    polar=dict(radialaxis=dict(visible=True, range=[0, 7])),
-                    showlegend=True, height=380,
-                    margin=dict(l=40, r=40, t=40, b=40)
+                    polar=dict(
+                        radialaxis=dict(
+                            visible=True, range=[0, 7],
+                            tickvals=[1,2,3,4,5,6,7],
+                            tickfont=dict(size=9, color='#999'),
+                            gridcolor='#e8e8e8'
+                        ),
+                        angularaxis=dict(
+                            tickfont=dict(size=10, color='#555'),
+                            gridcolor='#e8e8e8'
+                        )
+                    ),
+                    showlegend=True,
+                    legend=dict(orientation='h', y=-0.2, font=dict(size=10)),
+                    height=420,
+                    margin=dict(l=40, r=40, t=40, b=80),
+                    paper_bgcolor='white'
                 )
                 st.plotly_chart(fig_radar, use_container_width=True)
 
