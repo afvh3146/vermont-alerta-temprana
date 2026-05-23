@@ -490,7 +490,7 @@ with tab2:
                 highlight_ingles = st.checkbox(
                     "Resaltar materias en inglés",
                     value=False,
-                    key=f"ing_{sel_id}"
+                    key=f"ing_{idx}"
                 )
 
                 labels = [SUBJECT_LABELS[s] for s in subs_disp]
