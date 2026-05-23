@@ -134,15 +134,6 @@ with st.sidebar:
     df_filtrado = df_g[df_g["categoria"].isin(cats_activas)] if cats_activas else df_g.copy()
 
     st.divider()
-
-    st.markdown("### Contraste")
-    cat_highlight = st.selectbox(
-        "Destacar categoría",
-        ["Ninguna"] + ALERT_ORDER,
-        help="Resalta una categoría; el resto queda en gris"
-    )
-
-    st.divider()
     n_total    = len(df_filtrado)
     n_criticos = (df_filtrado["categoria"] == "Riesgo Confirmado").sum()
     n_ciegos   = (df_filtrado["categoria"] == "Punto Ciego").sum()
@@ -153,6 +144,8 @@ with st.sidebar:
 # ─────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────
+cat_highlight = "Ninguna"  # se sobreescribe en Tab 1
+
 def get_color(cat):
     if cat_highlight == "Ninguna":
         return ALERT_COLORS[cat]
@@ -213,7 +206,6 @@ tab1, tab2, tab3, tab4 = st.tabs([
 # ══════════════════════════════════════════════
 with tab1:
 
-    # Métricas con descripción inline
     cols_m = st.columns(4)
     for i, cat in enumerate(ALERT_ORDER):
         n = (df_filtrado["categoria"] == cat).sum()
@@ -232,7 +224,16 @@ with tab1:
     st.divider()
 
     # ── SCATTER ──
-    st.markdown("#### Probabilidad de riesgo vs. Materias en bajo rendimiento")
+    col_titulo, col_contraste = st.columns([3, 1])
+    with col_titulo:
+        st.markdown("#### Probabilidad de riesgo vs. Materias en bajo rendimiento")
+    with col_contraste:
+        cat_highlight = st.selectbox(
+            "Destacar",
+            ["Ninguna"] + ALERT_ORDER,
+            label_visibility="collapsed",
+            help="Resalta una categoría; el resto queda en gris"
+        )
 
     df_sc = df_filtrado.copy()
     df_sc["hover_text"] = df_sc.apply(build_hover, axis=1)
@@ -269,7 +270,6 @@ with tab1:
             showlegend=True
         ))
 
-    # Líneas de referencia
     fig_sc.add_vline(
         x=0.30, line_dash="dash", line_color="#e74c3c", line_width=1.5,
         annotation_text="Umbral de riesgo (0.30)",
@@ -284,7 +284,6 @@ with tab1:
         annotation_font_size=11
     )
 
-    # Etiquetas de cuadrante
     fig_sc.add_annotation(x=0.15, y=9.3, text="🟠 Punto ciego",
         showarrow=False, font=dict(color="#e67e22", size=11), opacity=0.8)
     fig_sc.add_annotation(x=0.75, y=9.3, text="🔴 Riesgo confirmado",
@@ -305,21 +304,14 @@ with tab1:
             tickvals=[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
         ),
         yaxis=dict(range=[-0.5, 10.5], gridcolor="#f0f0f0", dtick=1),
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.02,
-            font=dict(size=12)
-        ),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, font=dict(size=12)),
         margin=dict(l=50, r=20, t=60, b=50),
         plot_bgcolor="white", paper_bgcolor="white",
         hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="#ddd")
     )
     st.plotly_chart(fig_sc, use_container_width=True)
+    st.caption("◆ = estudiante con LSC (borde negro) · ● = sin LSC")
 
-    st.caption(
-        "◆ = estudiante con LSC (borde negro) · ● = sin LSC · "
-    )
-
-    # Distribución
     col_bar, col_grade = st.columns(2)
 
     with col_bar:
