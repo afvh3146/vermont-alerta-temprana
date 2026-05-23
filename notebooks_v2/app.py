@@ -388,96 +388,102 @@ with tab1:
 # ══════════════════════════════════════════════
 with tab2:
 
-    st.markdown("#### Lista de estudiantes — urgentes primero")
+    st.markdown("#### Lista de estudiantes — urgentes primero · Haz clic en una fila para ver el perfil")
+
     df_tabla = df_filtrado.copy()
     df_tabla["cat_order"] = df_tabla["categoria"].map(
         {cat: i for i, cat in enumerate(ALERT_ORDER)}
     )
-    df_tabla = df_tabla.sort_values("cat_order")
+    df_tabla = df_tabla.sort_values("cat_order").reset_index(drop=True)
 
     cols_show = [
         "student_id", "grade", "seccion", "categoria",
-        "pred_label", "confianza", "avg_T1", "avg_T2",
-        "tendencia_general", "n_bajo_acumulada",
-        "t3_confirma_riesgo", "marcador_LSC",
+        "pred_label", "avg_T1", "avg_T2",
+        "n_bajo_acumulada", "marcador_LSC",
         "perfil", "n_f1", "n_f2", "total_absences"
     ]
     cols_show = [c for c in cols_show if c in df_tabla.columns]
     df_show = df_tabla[cols_show].copy()
-    df_show["confianza"] = (df_show["confianza"] * 100).round(0).astype(str) + "%"
     df_show["avg_T1"] = df_show["avg_T1"].round(2)
     df_show["avg_T2"] = df_show["avg_T2"].round(2)
-    df_show["tendencia_general"] = df_show["tendencia_general"].round(2)
     df_show["marcador_LSC"] = df_show["marcador_LSC"].map({1: "✓", 0: ""})
     df_show["categoria"] = df_show["categoria"].apply(
         lambda x: f"{ALERT_EMOJI.get(x,'')} {x}"
     )
     df_show = df_show.rename(columns={
-        "student_id": "ID", "grade": "Grado", "seccion": "Secc.",
-        "categoria": "Categoría", "pred_label": "Pred. modelo",
-        "confianza": "Confianza", "avg_T1": "Prom. T1", "avg_T2": "Prom. T2",
-        "tendencia_general": "Tendencia", "n_bajo_acumulada": "Mat. < 4.0",
-        "t3_confirma_riesgo": "T3 confirma", "marcador_LSC": "LSC",
-        "perfil": "Perfil", "n_f1": "F1", "n_f2": "F2",
-        "total_absences": "Ausencias"
+        "student_id":       "ID",
+        "grade":            "Grado",
+        "seccion":          "Secc.",
+        "categoria":        "Categoría",
+        "pred_label":       "Pred. modelo",
+        "avg_T1":           "Prom. T1",
+        "avg_T2":           "Prom. T2",
+        "n_bajo_acumulada": "Mat. < 4.0",
+        "marcador_LSC":     "LSC",
+        "perfil":           "Perfil",
+        "n_f1":             "F1",
+        "n_f2":             "F2",
+        "total_absences":   "Ausencias"
     })
-    st.dataframe(df_show, use_container_width=True, height=380)
 
-    st.divider()
-    st.markdown("#### Perfil individual")
+    selection = st.dataframe(
+        df_show,
+        use_container_width=True,
+        height=380,
+        on_select="rerun",
+        selection_mode="single-row"
+    )
 
-    ids_disponibles = df_filtrado["student_id"].tolist()
-    if ids_disponibles:
-        sel_id = st.selectbox("Seleccionar estudiante", ids_disponibles)
-        row = df_filtrado[df_filtrado["student_id"] == sel_id].iloc[0]
+    # Perfil individual — carga al seleccionar fila
+    selected_rows = selection.selection.rows
+    if selected_rows:
+        idx = selected_rows[0]
+        row = df_tabla.iloc[idx]
 
-        col_info, col_radar = st.columns([1, 2])
-        with col_info:
-            cat   = row["categoria"]
-            color = ALERT_COLORS.get(cat, "#888")
-            st.markdown(f"""
-            <div style="background:{color}22; border-left:5px solid {color};
-                        padding:16px; border-radius:8px; margin-bottom:16px">
-                <b style="color:{color}">{ALERT_EMOJI.get(cat,'')} {cat}</b><br>
-                <span style="font-size:0.85em; color:#444">{ALERT_ACCION.get(cat,'')}</span>
-            </div>
-            """, unsafe_allow_html=True)
-            st.markdown(f"**Grado:** {row['grade']}° {row['seccion']}")
-            st.markdown(f"**Promedio T1:** {row['avg_T1']:.2f}")
-            st.markdown(f"**Promedio T2:** {row['avg_T2']:.2f}")
-            st.markdown(f"**Tendencia:** {row['tendencia_general']:+.2f}")
-            st.markdown(f"**Materias bajo 4.0:** {int(row['n_bajo_acumulada'])}")
-            st.markdown(f"**Prob. riesgo:** {row['proba_critical']*100:.0f}%")
-            st.markdown(f"**Confianza modelo:** {row['confianza']*100:.0f}%")
-            st.markdown(f"**T3 confirma riesgo:** {'Sí' if row['t3_confirma_riesgo'] else 'No'}")
-            lsc = "✓ Sí" if row.get("marcador_LSC", 0) == 1 else "No"
-            st.markdown(f"**LSC:** {lsc}")
-            if pd.notna(row.get("perfil")):
-                st.markdown(f"**Perfil cluster:** {row['perfil']}")
-            st.markdown(f"**F1 / F2:** {int(row.get('n_f1',0))} / {int(row.get('n_f2',0))}")
-            st.markdown(f"**Ausencias:** {int(row.get('total_absences',0))}")
+        st.divider()
+        cat   = row["categoria"]
+        color = ALERT_COLORS.get(cat, "#888")
+        st.markdown(f"""
+        <div style="background:{color}22; border-left:5px solid {color};
+                    padding:12px 16px; border-radius:8px; margin-bottom:16px">
+            <b style="color:{color}">{ALERT_EMOJI.get(cat,'')} {cat}</b>
+            <span style="font-size:0.85em; color:#444; margin-left:12px">
+                {ALERT_ACCION.get(cat,'')}
+            </span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col_radar, col_mat = st.columns([1, 1])
 
         with col_radar:
             subs_disp = [s for s in SUBJECTS
                          if not pd.isna(row.get(f"{s}_T1", np.nan))]
             if subs_disp:
                 labels = [SUBJECT_LABELS[s] for s in subs_disp]
-                t1_v = [row.get(f"{s}_T1", 0) or 0 for s in subs_disp]
-                t2_v = [row.get(f"{s}_T2", 0) or 0 for s in subs_disp]
-                t3_v = [row.get(f"{s}_T3_pred", 0) or 0 for s in subs_disp]
+                t1_v   = [row.get(f"{s}_T1", 0) or 0 for s in subs_disp]
+                t2_v   = [row.get(f"{s}_T2", 0) or 0 for s in subs_disp]
+                t3a_v  = [row.get(f"{s}_T3", 0) or 0 for s in subs_disp]
+                t3p_v  = [row.get(f"{s}_T3_pred", 0) or 0 for s in subs_disp]
+
                 fig_radar = go.Figure()
-                for vals, name, clr in [
-                    (t1_v, "T1 real",  "#3498db"),
-                    (t2_v, "T2 real",  "#9b59b6"),
-                    (t3_v, "T3 pred.", "#e74c3c"),
+                for vals, name, clr, dash in [
+                    (t1_v,  "T1 real",   "#5dade2", "solid"),
+                    (t2_v,  "T2 real",   "#1a5276", "solid"),
+                    (t3a_v, "T3 actual", "#27ae60", "solid"),
+                    (t3p_v, "T3 pred.",  "#27ae60", "dot"),
                 ]:
                     fig_radar.add_trace(go.Scatterpolar(
-                        r=vals + [vals[0]], theta=labels + [labels[0]],
-                        fill="toself", name=name,
-                        line_color=clr, fillcolor=clr, opacity=0.25
+                        r=vals + [vals[0]],
+                        theta=labels + [labels[0]],
+                        fill="toself" if dash == "solid" else "none",
+                        name=name,
+                        line=dict(color=clr, dash=dash),
+                        fillcolor=clr if dash == "solid" else "rgba(0,0,0,0)",
+                        opacity=0.25 if dash == "solid" else 0.9
                     ))
                 fig_radar.add_trace(go.Scatterpolar(
-                    r=[4.0] * (len(labels) + 1), theta=labels + [labels[0]],
+                    r=[4.0] * (len(labels) + 1),
+                    theta=labels + [labels[0]],
                     mode="lines", name="Mín. aprobación",
                     line=dict(color="red", dash="dash", width=1.5)
                 ))
@@ -488,39 +494,50 @@ with tab2:
                 )
                 st.plotly_chart(fig_radar, use_container_width=True)
 
-        st.markdown("#### Notas y predicción T3 por materia")
-        rows_mat = []
-        for s in SUBJECTS:
-            t1 = row.get(f"{s}_T1", np.nan)
-            if pd.isna(t1):
-                continue
-            t2      = row.get(f"{s}_T2", np.nan)
-            t3_pred = row.get(f"{s}_T3_pred", np.nan)
-            t3_p10  = row.get(f"{s}_T3_p10", np.nan)
-            t3_p90  = row.get(f"{s}_T3_p90", np.nan)
-            min_t3  = row.get(f"{s}_min_T3", np.nan)
-            t3_real = row.get(f"{s}_T3", np.nan)
-            intervalo = f"[{t3_p10:.1f}–{t3_p90:.1f}]" if not pd.isna(t3_p10) else "—"
-            estado = ""
-            if not pd.isna(t3_real) and t3_real < 4.0:
-                estado = "⚠️"
-            elif not pd.isna(t3_pred) and t3_pred < 4.0:
-                estado = "🔸"
-            rows_mat.append({
-                "":                  estado,
-                "Materia":           SUBJECT_LABELS[s],
-                "T1":                round(t1, 2),
-                "T2":                round(t2, 2) if not pd.isna(t2) else "—",
-                "T3 parcial":        round(t3_real, 2) if not pd.isna(t3_real) else "—",
-                "T3 predicho":       round(t3_pred, 2) if not pd.isna(t3_pred) else "—",
-                "IC [P10–P90]":      intervalo,
-                "T3 mín. necesario": round(min_t3, 2) if not pd.isna(min_t3) else "—",
-            })
-        if rows_mat:
-            st.dataframe(pd.DataFrame(rows_mat), use_container_width=True,
-                         hide_index=True)
-        st.caption("⚠️ T3 parcial ya bajo 4.0 · 🔸 T3 predicho bajo 4.0")
+        with col_mat:
+            st.markdown("**Notas por materia**")
+            rows_mat = []
+            for s in SUBJECTS:
+                t1 = row.get(f"{s}_T1", np.nan)
+                if pd.isna(t1):
+                    continue
+                t2      = row.get(f"{s}_T2", np.nan)
+                t3_pred = row.get(f"{s}_T3_pred", np.nan)
+                t3_p10  = row.get(f"{s}_T3_p10", np.nan)
+                t3_p90  = row.get(f"{s}_T3_p90", np.nan)
+                min_t3  = row.get(f"{s}_min_T3", np.nan)
+                t3_real = row.get(f"{s}_T3", np.nan)
 
+                # Incertidumbre como ±
+                if not pd.isna(t3_pred) and not pd.isna(t3_p10) and not pd.isna(t3_p90):
+                    amp = (t3_p90 - t3_p10) / 2
+                    t3_pred_str = f"{t3_pred:.2f} ± {amp:.2f}"
+                elif not pd.isna(t3_pred):
+                    t3_pred_str = f"{t3_pred:.2f}"
+                else:
+                    t3_pred_str = "—"
+
+                estado = ""
+                if not pd.isna(t3_real) and t3_real < 4.0:
+                    estado = "⚠️"
+                elif not pd.isna(t3_pred) and t3_pred < 4.0:
+                    estado = "🔸"
+
+                rows_mat.append({
+                    "":                  estado,
+                    "Materia":           SUBJECT_LABELS[s],
+                    "T1":                round(t1, 2),
+                    "T2":                round(t2, 2) if not pd.isna(t2) else "—",
+                    "T3 actual":         round(t3_real, 2) if not pd.isna(t3_real) else "—",
+                    "T3 pred. ±":        t3_pred_str,
+                    "T3 mín.":           round(min_t3, 2) if not pd.isna(min_t3) else "—",
+                })
+            if rows_mat:
+                st.dataframe(pd.DataFrame(rows_mat), use_container_width=True,
+                             hide_index=True, height=360)
+            st.caption("⚠️ T3 actual bajo 4.0 · 🔸 T3 predicho bajo 4.0")
+    else:
+        st.info("Haz clic en una fila de la tabla para ver el perfil del estudiante.")
 # ══════════════════════════════════════════════
 # TAB 3 — POR ASIGNATURA
 # ══════════════════════════════════════════════
