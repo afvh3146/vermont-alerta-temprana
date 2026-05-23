@@ -455,138 +455,16 @@ with tab2:
 
         col_radar, col_mat = st.columns([1, 1])
 
-        with col_radar:
-            grade = int(row.get("grade", 9))
-            if grade == 9:
+        if grade == 9:
                 materias_ingles = {
                     "Science", "Mathematics", "Financial_Maths",
-                    "ICT_STEM", "English", "Mandarin", "Research_Methodology"
+                    "ICT_STEM", "English", "Research_Methodology"
                 }
             else:
                 materias_ingles = {
                     "Science", "Mathematics", "Financial_Maths",
-                    "ICT_STEM", "I_and_S", "English", "Mandarin"
+                    "ICT_STEM", "I_and_S", "English"
                 }
-
-            SUBJECTS_RADAR_9 = [
-                "Science", "Mathematics", "Financial_Maths", "ICT_STEM",
-                "I_and_S", "Research_Methodology", "English", "Mandarin",
-                "Lengua_Castellana", "Physical_Education"
-            ]
-            SUBJECTS_RADAR_78 = [
-                "Science", "Mathematics", "Financial_Maths", "ICT_STEM",
-                "I_and_S", "English", "Mandarin",
-                "Lengua_Castellana", "Physical_Education"
-            ]
-            subjects_orden = SUBJECTS_RADAR_9 if grade == 9 else SUBJECTS_RADAR_78
-            subs_disp = [s for s in subjects_orden
-                         if not pd.isna(row.get(f"{s}_T1", np.nan))]
-
-            if subs_disp:
-                highlight_ingles = st.checkbox(
-                    "Resaltar materias en inglés",
-                    value=False,
-                    key=f"ing_{idx}"
-                )
-
-                labels  = [SUBJECT_LABELS[s] for s in subs_disp]
-                t3a_v   = [row.get(f"{s}_T3", 0) or 0 for s in subs_disp]
-                t3p_v   = [row.get(f"{s}_T3_pred", 0) or 0 for s in subs_disp]
-
-                COLOR_ACTIVO = "#27ae60"
-                COLOR_PRED   = "#a8d5b5"
-                COLOR_MIN    = "#c0392b"
-
-                # T3 actual — desvanecer si no es inglés
-                t3a_plot = [
-                    v * 0.12 if (highlight_ingles and s not in materias_ingles) else v
-                    for v, s in zip(t3a_v, subs_disp)
-                ]
-
-                # T3 predicho — desvanecer si no es inglés
-                t3p_plot = [
-                    v * 0.12 if (highlight_ingles and s not in materias_ingles) else v
-                    for v, s in zip(t3p_v, subs_disp)
-                ]
-
-                fig_radar = go.Figure()
-
-                # Mínimo
-                fig_radar.add_trace(go.Scatterpolar(
-                    r=[4.0] * (len(labels) + 1),
-                    theta=labels + [labels[0]],
-                    mode='lines', name='Mínimo (4.0)',
-                    line=dict(color=COLOR_MIN, dash='dash', width=1.5),
-                    showlegend=True, hoverinfo='skip'
-                ))
-
-                # T3 actual
-                fig_radar.add_trace(go.Scatterpolar(
-                    r=t3a_plot + [t3a_plot[0]],
-                    theta=labels + [labels[0]],
-                    fill='toself',
-                    fillcolor='rgba(39,174,96,0.15)',
-                    name='T3 actual',
-                    line=dict(color=COLOR_ACTIVO, width=2.5),
-                    showlegend=True,
-                    hovertemplate='<b>%{theta}</b><br>T3 actual: %{r:.2f}<extra></extra>'
-                ))
-
-                # T3 predicho — línea punteada + relleno tenue
-                fig_radar.add_trace(go.Scatterpolar(
-                    r=t3p_plot + [t3p_plot[0]],
-                    theta=labels + [labels[0]],
-                    fill='toself',
-                    fillcolor='rgba(168,213,181,0.15)',
-                    name='T3 predicho',
-                    line=dict(color=COLOR_PRED, dash='dot', width=2),
-                    showlegend=True,
-                    hovertemplate='<b>%{theta}</b><br>T3 pred: %{r:.2f}<extra></extra>'
-                ))
-
-                # Anotaciones de labels con color según contraste
-                annotations = []
-                n = len(subs_disp)
-                for i, (s, lbl) in enumerate(zip(subs_disp, labels)):
-                    angle_deg = 90 - (360 / n) * i
-                    angle_rad = np.radians(angle_deg)
-                    x = 0.5 + 0.44 * np.cos(angle_rad)
-                    y = 0.5 + 0.44 * np.sin(angle_rad)
-                    es_ingles = s in materias_ingles
-                    color_lbl = "#333" if (not highlight_ingles or es_ingles) else "#cccccc"
-                    bold = highlight_ingles and es_ingles
-                    annotations.append(dict(
-                        x=x, y=y,
-                        xref='paper', yref='paper',
-                        text=f"<b>{lbl}</b>" if bold else lbl,
-                        showarrow=False,
-                        font=dict(size=10, color=color_lbl),
-                        xanchor='center', yanchor='middle'
-                    ))
-
-                fig_radar.update_layout(
-                    polar=dict(
-                        radialaxis=dict(
-                            visible=True, range=[0, 7],
-                            tickvals=[1,2,3,4,5,6,7],
-                            tickfont=dict(size=9, color='#aaa'),
-                            gridcolor='#ebebeb',
-                            linecolor='#ddd'
-                        ),
-                        angularaxis=dict(
-                            tickfont=dict(size=1, color='rgba(0,0,0,0)'),
-                            gridcolor='#ebebeb',
-                            linecolor='#ddd'
-                        )
-                    ),
-                    annotations=annotations,
-                    showlegend=True,
-                    legend=dict(orientation='h', y=-0.18, font=dict(size=10)),
-                    height=420,
-                    margin=dict(l=60, r=60, t=40, b=80),
-                    paper_bgcolor='white'
-                )
-                st.plotly_chart(fig_radar, use_container_width=True)
 
         with col_mat:
             st.markdown("**Notas por materia**")
