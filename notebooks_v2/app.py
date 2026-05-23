@@ -171,14 +171,18 @@ def build_hover(row):
         f"Prob. riesgo (crítico): {row['proba_critical']*100:.0f}%",
         f"LSC: {'✓ Sí' if row.get('marcador_LSC', 0) == 1 else 'No'}",
         "──────────────",
-        "<b>Materias bajo 4.0:</b>"
+        "<b>Materias con nota acumulada bajo 4.0:</b>"
     ]
     tiene_bajas = False
     for s in SUBJECTS:
-        val = row.get(f"{s}_T3", np.nan)
-        if not pd.isna(val) and val < 4.0:
-            lines.append(f"  ⚠️ {SUBJECT_LABELS[s]}: {val:.2f}")
-            tiene_bajas = True
+        t1  = row.get(f"{s}_T1", np.nan)
+        t2  = row.get(f"{s}_T2", np.nan)
+        t3  = row.get(f"{s}_T3", np.nan)
+        if not any(pd.isna([t1, t2, t3])):
+            acum = t1*0.30 + t2*0.30 + t3*0.40
+            if acum < 4.0:
+                lines.append(f"  ⚠️ {SUBJECT_LABELS[s]}: acum {acum:.2f}")
+                tiene_bajas = True
     if not tiene_bajas:
         lines.append("  ✓ Ninguna")
     return "<br>".join(lines)
