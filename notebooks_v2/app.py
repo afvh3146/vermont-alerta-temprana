@@ -545,10 +545,10 @@ with tab3:
     for s in SUBJECTS:
         label = SUBJECT_LABELS[s]
         for show, t, col, color, solid in [
-            (show_t1,  "T1",          f"{s}_T1",      "#3498db", True),
-            (show_t2,  "T2",          f"{s}_T2",      "#9b59b6", True),
-            (show_t3p, "T3 predicho", f"{s}_T3_pred", "#e74c3c", False),
-            (show_t3a, "T3 actual",   f"{s}_T3",      "#e67e22", True),
+            (show_t1,  "T1",          f"{s}_T1",      "#5dade2", True),
+            (show_t2,  "T2",          f"{s}_T2",      "#1a5276", True),
+            (show_t3p, "T3 predicho", f"{s}_T3_pred", "#27ae60", False),
+            (show_t3a, "T3 actual",   f"{s}_T3",      "#27ae60", True),
         ]:
             if col in df_filtrado.columns:
                 vals = df_filtrado[col].dropna()
@@ -566,10 +566,10 @@ with tab3:
         df_subs = pd.DataFrame(subs_data)
 
         trimestres_config = [
-            ("T1",          "#3498db", True),
-            ("T2",          "#9b59b6", True),
-            ("T3 predicho", "#e74c3c", False),
-            ("T3 actual",   "#e67e22", True),
+            ("T1",          "#5dade2", True),
+            ("T2",          "#1a5276", True),
+            ("T3 predicho", "#27ae60", False),
+            ("T3 actual",   "#27ae60", True),
         ]
         show_map = {
             "T1":          show_t1,
