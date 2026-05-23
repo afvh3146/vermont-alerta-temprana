@@ -570,12 +570,12 @@ with tab2:
                             linecolor='#ddd'
                         ),
                         angularaxis=dict(
-                            tickfont=dict(size=1, color='rgba(0,0,0,0)'),
+                            tickfont=dict(size=10, color='#333'),
                             gridcolor='#ebebeb',
                             linecolor='#ddd'
                         )
                     ),
-                    annotations=annotations,
+                    annotations=[],
                     showlegend=True,
                     legend=dict(orientation='h', y=-0.18, font=dict(size=10)),
                     height=420,
