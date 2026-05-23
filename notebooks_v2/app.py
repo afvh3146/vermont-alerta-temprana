@@ -232,6 +232,7 @@ with tab1:
     cols_m = st.columns(4)
     for i, cat in enumerate(ALERT_ORDER):
         n = (df_filtrado["categoria"] == cat).sum()
+        pct = round(n / n_total * 100, 1) if n_total > 0 else 0
         color = get_color(cat)
         desc  = ALERT_DESC[cat]
         cols_m[i].markdown(f"""
@@ -239,6 +240,9 @@ with tab1:
             <span style="font-size:1.8em; font-weight:700; color:{color}">{n}</span>
             <span style="font-size:1em; color:{color}; margin-left:6px">
                 {ALERT_EMOJI[cat]} {cat}
+            </span>
+            <span style="font-size:0.9em; color:#999; margin-left:6px">
+                {pct}%
             </span><br>
             <span style="font-size:0.78em; color:#666; line-height:1.3">{desc}</span>
         </div>
