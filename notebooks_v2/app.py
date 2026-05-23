@@ -489,176 +489,109 @@ with tab2:
                     key=f"ing_{idx}"
                 )
 
-                labels = [SUBJECT_LABELS[s] for s in subs_disp]
-                t3a_v  = [row.get(f"{s}_T3", 0) or 0 for s in subs_disp]
-                t3p_v  = [row.get(f"{s}_T3_pred", 0) or 0 for s in subs_disp]
+                labels   = [SUBJECT_LABELS[s] for s in subs_disp]
+                t3a_v    = [row.get(f"{s}_T3", 0) or 0 for s in subs_disp]
+                t3p_v    = [row.get(f"{s}_T3_pred", 0) or 0 for s in subs_disp]
 
-                family_colors = {
-                    "Science":              "#4a90a4",
-                    "Mathematics":          "#5a8a5a",
-                    "Financial_Maths":      "#5a8a5a",
-                    "ICT_STEM":             "#5a8a5a",
-                    "I_and_S":              "#8a7a5a",
-                    "Research_Methodology": "#a0724a",
-                    "English":              "#8a6a8a",
-                    "Mandarin":             "#8a6a8a",
-                    "Lengua_Castellana":    "#8a7a5a",
-                    "Physical_Education":   "#a0724a",
-                }
+                COLOR_ACTIVO = "#27ae60"
+                COLOR_PRED   = "#5d6d7e"
+                COLOR_GRIS   = "#cccccc"
+                COLOR_MIN    = "#c0392b"
 
-                families_def = [
-                    ("🔬 Ciencias",    ["Science"],
-                     "rgba(74,144,164,0.12)",  "#4a90a4"),
-                    ("🔢 Matemáticas", ["Mathematics","Financial_Maths","ICT_STEM"],
-                     "rgba(90,138,90,0.12)",   "#5a8a5a"),
-                    ("🌐 Humanidades", ["I_and_S","Lengua_Castellana"],
-                     "rgba(138,122,90,0.12)",  "#8a7a5a"),
-                    ("🏃 Bienestar",   ["Physical_Education","Research_Methodology"],
-                     "rgba(160,114,74,0.12)",  "#a0724a"),
-                    ("🌍 Lenguas",     ["English","Mandarin"],
-                     "rgba(138,106,138,0.12)", "#8a6a8a"),
+                # T3 actual — desvanecer si no es inglés
+                t3a_plot = [
+                    v * 0.12 if (highlight_ingles and s not in materias_ingles) else v
+                    for v, s in zip(t3a_v, subs_disp)
+                ]
+
+                # T3 predicho — None si no es inglés (desaparece el punto)
+                t3p_plot = [
+                    None if (highlight_ingles and s not in materias_ingles) else v
+                    for v, s in zip(t3p_v, subs_disp)
+                ]
+                t3p_colors = [
+                    COLOR_GRIS if (highlight_ingles and s not in materias_ingles)
+                    else COLOR_PRED
+                    for s in subs_disp
                 ]
 
                 fig_radar = go.Figure()
 
-                # Sombreado familias
-                for fname, fmats, fcolor, fborder in families_def:
-                    fmats_disp = [SUBJECT_LABELS[s] for s in fmats
-                                  if s in subs_disp]
-                    if not fmats_disp:
-                        continue
-
-                    # Si contraste activo y familia no es inglés → gris
-                    es_ingles_fam = any(
-                        s in materias_ingles for s in fmats if s in subs_disp
-                    )
-                    if highlight_ingles and not es_ingles_fam:
-                        fcolor  = "rgba(210,210,210,0.08)"
-                        fborder = "#dddddd"
-
-                    r_s     = [7] * len(fmats_disp) + [0]
-                    theta_s = fmats_disp + [fmats_disp[0]]
-
-                    fig_radar.add_trace(go.Scatterpolar(
-                        r=r_s, theta=theta_s,
-                        fill='toself', fillcolor=fcolor,
-                        line=dict(color=fborder, width=0.5, dash='dot'),
-                        name=fname, hoverinfo='skip', showlegend=False
-                    ))
-
-                # Línea mínimo
+                # Mínimo
                 fig_radar.add_trace(go.Scatterpolar(
                     r=[4.0] * (len(labels) + 1),
                     theta=labels + [labels[0]],
                     mode='lines', name='Mínimo (4.0)',
-                    line=dict(color='#c0392b', dash='dash', width=1.5),
-                    showlegend=True
+                    line=dict(color=COLOR_MIN, dash='dash', width=1.5),
+                    showlegend=True, hoverinfo='skip'
                 ))
 
                 # T3 actual
-                t3a_plot = []
-                for i, s in enumerate(subs_disp):
-                    v = t3a_v[i]
-                    if highlight_ingles and s not in materias_ingles:
-                        t3a_plot.append(v * 0.15)
-                    else:
-                        t3a_plot.append(v)
-
                 fig_radar.add_trace(go.Scatterpolar(
                     r=t3a_plot + [t3a_plot[0]],
                     theta=labels + [labels[0]],
                     fill='toself',
                     fillcolor='rgba(39,174,96,0.15)',
                     name='T3 actual',
-                    line=dict(
-                        color='#27ae60' if not highlight_ingles else '#27ae60',
-                        width=2
-                    ),
-                    showlegend=True
+                    line=dict(color=COLOR_ACTIVO, width=2.5),
+                    showlegend=True,
+                    hovertemplate='<b>%{theta}</b><br>T3 actual: %{r:.2f}<extra></extra>'
                 ))
 
-                # T3 predicho
-                t3p_plot = []
-                for i, s in enumerate(subs_disp):
-                    v = t3p_v[i]
-                    if highlight_ingles and s not in materias_ingles:
-                        t3p_plot.append(v * 0.15)
-                    else:
-                        t3p_plot.append(v)
-
+                # T3 predicho — solo puntos diamante
                 fig_radar.add_trace(go.Scatterpolar(
-                    r=t3p_plot + [t3p_plot[0]],
-                    theta=labels + [labels[0]],
-                    fill='none',
-                    name='T3 pred.',
-                    line=dict(color='#27ae60', dash='dot', width=2),
-                    showlegend=True
-                ))
-
-                # Puntos coloreados (o grises si contraste)
-                marker_colors = []
-                for s in subs_disp:
-                    if highlight_ingles and s not in materias_ingles:
-                        marker_colors.append("#dddddd")
-                    else:
-                        marker_colors.append(family_colors.get(s, "#888"))
-
-                # Labels en gris si contraste activo y no inglés
-                label_colors = []
-                for s in subs_disp:
-                    if highlight_ingles and s not in materias_ingles:
-                        label_colors.append("#cccccc")
-                    else:
-                        label_colors.append(
-                            family_colors.get(s, "#555")
-                        )
-
-                fig_radar.add_trace(go.Scatterpolar(
-                    r=t3a_v,
+                    r=t3p_plot,
                     theta=labels,
                     mode='markers',
+                    name='T3 predicho',
                     marker=dict(
-                        color=marker_colors,
+                        color=t3p_colors,
                         size=10,
+                        symbol='diamond',
                         line=dict(color='white', width=1.5)
                     ),
-                    showlegend=False,
-                    hovertemplate='<b>%{theta}</b><br>T3: %{r}<extra></extra>'
+                    showlegend=True,
+                    hovertemplate='<b>%{theta}</b><br>T3 pred: %{r:.2f}<extra></extra>'
                 ))
 
-                # Nombres de materias coloreados individualmente
-                # Plotly no permite color por punto en angularaxis,
-                # pero podemos agregar anotaciones de texto
+                # Anotaciones de labels con color según contraste
+                annotations = []
+                n = len(subs_disp)
                 for i, (s, lbl) in enumerate(zip(subs_disp, labels)):
-                    clr = label_colors[i]
-                    angle_deg = 360 / len(subs_disp) * i
+                    angle_deg = 90 - (360 / n) * i
                     angle_rad = np.radians(angle_deg)
-                    x_pos = 0.5 + 0.48 * np.cos(angle_rad)
-                    y_pos = 0.5 + 0.48 * np.sin(angle_rad)
-                    fig_radar.add_annotation(
-                        x=x_pos, y=y_pos,
+                    x = 0.5 + 0.44 * np.cos(angle_rad)
+                    y = 0.5 + 0.44 * np.sin(angle_rad)
+                    es_ingles = s in materias_ingles
+                    color_lbl = "#333" if (not highlight_ingles or es_ingles) else "#cccccc"
+                    bold = highlight_ingles and es_ingles
+                    annotations.append(dict(
+                        x=x, y=y,
                         xref='paper', yref='paper',
-                        text=f"<b>{lbl}</b>" if (not highlight_ingles or s in materias_ingles) else lbl,
+                        text=f"<b>{lbl}</b>" if bold else lbl,
                         showarrow=False,
-                        font=dict(size=10, color=clr),
+                        font=dict(size=10, color=color_lbl),
                         xanchor='center', yanchor='middle'
-                    )
+                    ))
 
                 fig_radar.update_layout(
                     polar=dict(
                         radialaxis=dict(
                             visible=True, range=[0, 7],
                             tickvals=[1,2,3,4,5,6,7],
-                            tickfont=dict(size=9, color='#999'),
-                            gridcolor='#e8e8e8'
+                            tickfont=dict(size=9, color='#aaa'),
+                            gridcolor='#ebebeb',
+                            linecolor='#ddd'
                         ),
                         angularaxis=dict(
                             tickfont=dict(size=1, color='rgba(0,0,0,0)'),
-                            gridcolor='#e8e8e8'
+                            gridcolor='#ebebeb',
+                            linecolor='#ddd'
                         )
                     ),
+                    annotations=annotations,
                     showlegend=True,
-                    legend=dict(orientation='h', y=-0.15, font=dict(size=10)),
+                    legend=dict(orientation='h', y=-0.18, font=dict(size=10)),
                     height=420,
                     margin=dict(l=60, r=60, t=40, b=80),
                     paper_bgcolor='white'
