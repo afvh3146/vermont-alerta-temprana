@@ -168,7 +168,7 @@ def build_hover(row):
         f"<b>ID: {row['student_id']}</b>",
         f"Grado: {row['grado_label']}",
         f"Categoría: {ALERT_EMOJI.get(row['categoria'],'')} {row['categoria']}",
-        f"Prob. riesgo: {row['proba_riesgo']*100:.0f}%",
+        f"Prob. riesgo (crítico): {row['proba_critical']*100:.0f}%",
         f"LSC: {'✓ Sí' if row.get('marcador_LSC', 0) == 1 else 'No'}",
         "──────────────",
         "<b>Materias bajo 4.0:</b>"
@@ -249,7 +249,7 @@ with tab1:
         sizes    = sub["marcador_LSC"].map({1: size + 3, 0: size})
 
         fig_sc.add_trace(go.Scatter(
-            x=sub["proba_riesgo"],
+            x=sub["proba_critical"],
             y=sub["n_bajo_acumulada"],
             mode="markers",
             name=f"{ALERT_EMOJI[cat]} {cat}",
