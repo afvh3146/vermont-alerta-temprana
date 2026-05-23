@@ -494,7 +494,7 @@ with tab2:
                 t3p_v    = [row.get(f"{s}_T3_pred", 0) or 0 for s in subs_disp]
 
                 COLOR_ACTIVO = "#27ae60"
-                COLOR_PRED   = "#5d6d7e"
+                COLOR_PRED   = "#a8d5b5"
                 COLOR_GRIS   = "#cccccc"
                 COLOR_MIN    = "#c0392b"
 
