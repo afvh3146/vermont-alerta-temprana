@@ -75,21 +75,21 @@ ALERT_ACCION = {
     "Sin Riesgo":        "Seguimiento rutinario",
 }
 
-# ─────────────────────────────────────────────
-# CARGA DE DATOS
-# ─────────────────────────────────────────────
+GRADO_MAP = {"X": 7, "Y": 8, "Z": 9}
+GRADO_LABEL = {7: "X", 8: "Y", 9: "Z"}
+
 @st.cache_data(ttl=3600)
 def load_data():
     df = pd.read_csv(DATA_URL)
     df["seccion"] = df["section_anon"].str[-1]
-    df["grado_label"] = df["grade"].astype(str) + "° " + df["seccion"]
+    df["grado_label"] = df["grade"].map(GRADO_LABEL) + " " + df["seccion"]
     df["categoria"] = df["categoria"].fillna("Riesgo Teórico")
     return df
 
 df = load_data()
 
 # ─────────────────────────────────────────────
-# SIDEBAR — solo LSC, categorías y métricas
+# SIDEBAR
 # ─────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 🏫 Vermont EWS")
@@ -114,11 +114,10 @@ with st.sidebar:
             cats_activas.append(cat)
 
     st.divider()
-    # Métricas resumen — se actualizan después de aplicar filtros globales
     metrics_placeholder = st.empty()
 
 # ─────────────────────────────────────────────
-# TÍTULO + SELECTOR DE GRADO GLOBAL
+# TÍTULO + SELECTOR DE GRADO
 # ─────────────────────────────────────────────
 st.markdown("# 🏫 Vermont Early Warning System")
 
@@ -135,7 +134,7 @@ with col_seccion:
         seccion_sel = st.selectbox("Sección", ["Todas", "A", "B"],
                                     label_visibility="collapsed")
     else:
-        grado_num = int(grado_sel[0])
+        grado_num = GRADO_MAP[grado_sel]
         secciones_disp = ["Todas"] + sorted(
             df[df["grade"] == grado_num]["seccion"].unique().tolist()
         )
@@ -143,12 +142,12 @@ with col_seccion:
                                     label_visibility="collapsed")
 
 # ─────────────────────────────────────────────
-# APLICAR FILTROS GLOBALES
+# FILTROS GLOBALES
 # ─────────────────────────────────────────────
 if grado_sel == "Todos":
     df_g = df.copy()
 else:
-    df_g = df[df["grade"] == int(grado_sel[0])].copy()
+    df_g = df[df["grade"] == GRADO_MAP[grado_sel]].copy()
 
 if seccion_sel != "Todas":
     df_g = df_g[df_g["seccion"] == seccion_sel]
@@ -158,16 +157,15 @@ if solo_lsc:
 
 df_filtrado = df_g[df_g["categoria"].isin(cats_activas)] if cats_activas else df_g.copy()
 
-# Actualizar métricas en sidebar
 n_total    = len(df_filtrado)
 n_criticos = (df_filtrado["categoria"] == "Riesgo Confirmado").sum()
 n_ciegos   = (df_filtrado["categoria"] == "Punto Ciego").sum()
+
 with metrics_placeholder:
     st.metric("Estudiantes", n_total)
     st.metric("🔴 Riesgo confirmado", n_criticos)
     st.metric("🟠 Punto ciego", n_ciegos)
 
-# Subtítulo
 grupo_texto = grado_sel if grado_sel != "Todos" else "Middle School"
 if seccion_sel != "Todas":
     grupo_texto += f" · Sección {seccion_sel}"
@@ -225,7 +223,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 
 # ══════════════════════════════════════════════
-# TAB 1 — SEMÁFORO GENERAL
+# TAB 1
 # ══════════════════════════════════════════════
 with tab1:
 
@@ -241,16 +239,13 @@ with tab1:
             <span style="font-size:1em; color:{color}; margin-left:6px">
                 {ALERT_EMOJI[cat]} {cat}
             </span>
-            <span style="font-size:0.9em; color:#999; margin-left:6px">
-                {pct}%
-            </span><br>
+            <span style="font-size:0.9em; color:#999; margin-left:6px">{pct}%</span><br>
             <span style="font-size:0.78em; color:#666; line-height:1.3">{desc}</span>
         </div>
         """, unsafe_allow_html=True)
 
     st.divider()
 
-    # Scatter
     col_titulo, col_contraste = st.columns([3, 1])
     with col_titulo:
         st.markdown("#### Probabilidad de riesgo vs. Materias en bajo rendimiento")
@@ -356,8 +351,7 @@ with tab1:
             fig_sec = px.bar(
                 sec_cat, x="seccion", y="n", color="categoria",
                 color_discrete_map={c: get_color(c) for c in ALERT_ORDER},
-                labels={"seccion": "Sección", "n": "Estudiantes",
-                        "categoria": "Categoría"},
+                labels={"seccion": "Sección", "n": "Estudiantes", "categoria": "Categoría"},
                 height=240
             )
             fig_sec.update_layout(
@@ -372,13 +366,13 @@ with tab1:
                 df_filtrado.groupby(["grade", "categoria"])
                 .size().reset_index(name="n")
             )
-            grade_cat["grado_str"] = grade_cat["grade"].astype(str) + "°"
+            grade_cat["grado_str"] = grade_cat["grade"].map(GRADO_LABEL)
             fig_grade = px.bar(
                 grade_cat, x="grado_str", y="n", color="categoria",
                 color_discrete_map={c: get_color(c) for c in ALERT_ORDER},
-                labels={"grado_str": "Grado", "n": "Estudiantes",
-                        "categoria": "Categoría"},
-                height=240
+                labels={"grado_str": "Grado", "n": "Estudiantes", "categoria": "Categoría"},
+                height=240,
+                category_orders={"grado_str": ["X", "Y", "Z"]}
             )
             fig_grade.update_layout(
                 showlegend=False,
@@ -388,7 +382,7 @@ with tab1:
             st.plotly_chart(fig_grade, use_container_width=True)
 
 # ══════════════════════════════════════════════
-# TAB 2 — DETALLE POR ESTUDIANTE
+# TAB 2
 # ══════════════════════════════════════════════
 with tab2:
 
@@ -410,6 +404,7 @@ with tab2:
     df_show = df_tabla[cols_show].copy()
     df_show["avg_T1"] = df_show["avg_T1"].round(2)
     df_show["avg_T2"] = df_show["avg_T2"].round(2)
+    df_show["grade"] = df_show["grade"].map(GRADO_LABEL)
     df_show["marcador_LSC"] = df_show["marcador_LSC"].map({1: "✓", 0: ""})
     df_show["categoria"] = df_show["categoria"].apply(
         lambda x: f"{ALERT_EMOJI.get(x,'')} {x}"
@@ -511,7 +506,6 @@ with tab2:
 
                 fig_radar = go.Figure()
 
-                # Mínimo
                 fig_radar.add_trace(go.Scatterpolar(
                     r=[4.0] * (len(labels) + 1),
                     theta=labels + [labels[0]],
@@ -520,7 +514,6 @@ with tab2:
                     showlegend=True, hoverinfo='skip'
                 ))
 
-                # T3 actual
                 fig_radar.add_trace(go.Scatterpolar(
                     r=t3a_plot + [t3a_plot[0]],
                     theta=labels + [labels[0]],
@@ -532,7 +525,6 @@ with tab2:
                     hovertemplate='<b>%{theta}</b><br>T3 actual: %{r:.2f}<extra></extra>'
                 ))
 
-                # T3 predicho
                 fig_radar.add_trace(go.Scatterpolar(
                     r=t3p_plot + [t3p_plot[0]],
                     theta=labels + [labels[0]],
@@ -544,11 +536,11 @@ with tab2:
                     hovertemplate='<b>%{theta}</b><br>T3 pred: %{r:.2f}<extra></extra>'
                 ))
 
-                # Anotaciones de labels
+                # Labels coloreados por contraste
                 annotations = []
-                n = len(subs_disp)
+                n_subs = len(subs_disp)
                 for i, (s, lbl) in enumerate(zip(subs_disp, labels)):
-                    angle_deg = 90 - (360 / n) * i
+                    angle_deg = 90 - (360 / n_subs) * i
                     angle_rad = np.radians(angle_deg)
                     x = 0.5 + 0.44 * np.cos(angle_rad)
                     y = 0.5 + 0.44 * np.sin(angle_rad)
@@ -570,16 +562,14 @@ with tab2:
                             visible=True, range=[0, 7],
                             tickvals=[1,2,3,4,5,6,7],
                             tickfont=dict(size=9, color='#aaa'),
-                            gridcolor='#ebebeb',
-                            linecolor='#ddd'
+                            gridcolor='#ebebeb', linecolor='#ddd'
                         ),
                         angularaxis=dict(
-                            tickfont=dict(size=10, color='#333'),
-                            gridcolor='#ebebeb',
-                            linecolor='#ddd'
+                            tickfont=dict(size=1, color='rgba(0,0,0,0)'),
+                            gridcolor='#ebebeb', linecolor='#ddd'
                         )
                     ),
-                    annotations=[],
+                    annotations=annotations,
                     showlegend=True,
                     legend=dict(orientation='h', y=-0.18, font=dict(size=10)),
                     height=420,
@@ -631,15 +621,15 @@ with tab2:
             st.caption("⚠️ T3 actual bajo 4.0 · 🔸 T3 predicho bajo 4.0")
     else:
         st.info("Haz clic en una fila de la tabla para ver el perfil del estudiante.")
+
 # ══════════════════════════════════════════════
-# TAB 3 — POR ASIGNATURA
+# TAB 3
 # ══════════════════════════════════════════════
 with tab3:
 
     st.markdown("#### Promedio del grupo por asignatura")
     st.caption("Selecciona los trimestres que quieres ver")
 
-    # Selector de trimestres
     col_t1, col_t2, col_t3p, col_t3a = st.columns(4)
     with col_t1:
         show_t1 = st.checkbox("T1", value=True)
@@ -650,7 +640,6 @@ with tab3:
     with col_t3a:
         show_t3a = st.checkbox("T3 actual", value=True)
 
-    # Calcular promedios por materia
     subs_data = []
     for s in SUBJECTS:
         label = SUBJECT_LABELS[s]
@@ -674,7 +663,6 @@ with tab3:
 
     if subs_data:
         df_subs = pd.DataFrame(subs_data)
-
         trimestres_config = [
             ("T1",          "#5dade2", True),
             ("T2",          "#1a5276", True),
@@ -689,7 +677,6 @@ with tab3:
         }
 
         fig_subs = go.Figure()
-
         for t, color, solid in trimestres_config:
             sub = df_subs[df_subs["Trimestre"] == t]
             if sub.empty:
@@ -700,46 +687,29 @@ with tab3:
 
             if solid:
                 fig_subs.add_trace(go.Bar(
-                    name=t,
-                    x=sub["Materia"],
-                    y=sub["Promedio"],
-                    marker_color=color_real,
-                    opacity=opac,
+                    name=t, x=sub["Materia"], y=sub["Promedio"],
+                    marker_color=color_real, opacity=opac,
                     text=sub["Promedio"].astype(str),
-                    textposition="outside",
-                    textfont=dict(size=9),
+                    textposition="outside", textfont=dict(size=9),
                 ))
             else:
                 fig_subs.add_trace(go.Bar(
-                    name=t,
-                    x=sub["Materia"],
-                    y=sub["Promedio"],
+                    name=t, x=sub["Materia"], y=sub["Promedio"],
                     marker=dict(
-                        color=color_real,
-                        opacity=opac,
-                        pattern=dict(
-                            shape="/",
-                            size=6,
-                            solidity=0.4,
-                            fgcolor=color_real,
-                            bgcolor="white"
-                        )
+                        color=color_real, opacity=opac,
+                        pattern=dict(shape="/", size=6, solidity=0.4,
+                                     fgcolor=color_real, bgcolor="white")
                     ),
                     text=sub["Promedio"].astype(str),
-                    textposition="outside",
-                    textfont=dict(size=9),
+                    textposition="outside", textfont=dict(size=9),
                 ))
 
-        fig_subs.add_hline(
-            y=4.0, line_dash="dash", line_color="red", line_width=1.5,
-            annotation_text="Mín. aprobación (4.0)",
-            annotation_font_color="red", annotation_font_size=11
-        )
+        fig_subs.add_hline(y=4.0, line_dash="dash", line_color="red", line_width=1.5,
+                            annotation_text="Mín. aprobación (4.0)",
+                            annotation_font_color="red", annotation_font_size=11)
         fig_subs.update_layout(
-            height=460,
-            barmode="group",
-            xaxis_title="Materia",
-            yaxis_title="Promedio",
+            height=460, barmode="group",
+            xaxis_title="Materia", yaxis_title="Promedio",
             yaxis=dict(range=[0, 7.8], gridcolor="#f0f0f0"),
             xaxis=dict(tickangle=-30),
             legend=dict(orientation="h", yanchor="bottom", y=1.02),
@@ -750,12 +720,8 @@ with tab3:
 
     st.divider()
 
-    # ── Barras horizontales: promedio acumulado por materia ──
     st.markdown("#### Materias con promedio acumulado bajo el mínimo")
-    st.caption(
-        "Promedio acumulado = T1×0.30 + T2×0.30 + T3×0.40 · "
-        "Solo muestra materias en riesgo o cerca del mínimo (< 4.5)"
-    )
+    st.caption("Promedio acumulado = T1×0.30 + T2×0.30 + T3×0.40 · Solo muestra materias en riesgo o cerca (< 4.5)")
 
     resumen_rows = []
     for s in SUBJECTS:
@@ -763,23 +729,17 @@ with tab3:
         col_t2s = f"{s}_T2"
         col_t3s = f"{s}_T3"
         col_t3p = f"{s}_T3_pred"
-
         if not all(c in df_filtrado.columns for c in [col_t1s, col_t2s, col_t3s]):
             continue
-
-        # Promedio acumulado del grupo
         df_sub = df_filtrado[[col_t1s, col_t2s, col_t3s]].dropna()
         if df_sub.empty:
             continue
-
+        df_sub = df_sub.copy()
         df_sub["acum"] = df_sub[col_t1s]*0.30 + df_sub[col_t2s]*0.30 + df_sub[col_t3s]*0.40
         prom_acum = round(df_sub["acum"].mean(), 2)
-
-        # Promedio predicho T3
-        prom_t3p = round(df_filtrado[col_t3p].mean(), 2) if col_t3p in df_filtrado.columns else None
-
+        prom_t3p  = round(df_filtrado[col_t3p].mean(), 2) if col_t3p in df_filtrado.columns else None
         resumen_rows.append({
-            "Materia":        SUBJECT_LABELS[s],
+            "Materia":         SUBJECT_LABELS[s],
             "Prom. acumulado": prom_acum,
             "Prom. T3 pred.":  prom_t3p,
         })
@@ -789,38 +749,28 @@ with tab3:
 
     if not df_res_show.empty:
         fig_horiz = go.Figure()
-
         fig_horiz.add_trace(go.Bar(
             name="Promedio acumulado",
             y=df_res_show["Materia"],
             x=df_res_show["Prom. acumulado"],
             orientation="h",
-            marker_color=[
-                "#e74c3c" if v < 4.0 else "#f39c12"
-                for v in df_res_show["Prom. acumulado"]
-            ],
+            marker_color=["#e74c3c" if v < 4.0 else "#f39c12"
+                          for v in df_res_show["Prom. acumulado"]],
             text=df_res_show["Prom. acumulado"].astype(str),
             textposition="outside"
         ))
-
-        # Puntos T3 predicho
         fig_horiz.add_trace(go.Scatter(
             name="T3 predicho (grupo)",
             y=df_res_show["Materia"],
             x=df_res_show["Prom. T3 pred."],
             mode="markers",
-            marker=dict(
-                color="#3498db", size=12, symbol="diamond",
-                line=dict(width=1.5, color="white")
-            )
+            marker=dict(color="#3498db", size=12, symbol="diamond",
+                        line=dict(width=1.5, color="white"))
         ))
-
-        fig_horiz.add_vline(
-            x=4.0, line_dash="dash", line_color="red", line_width=1.5,
-            annotation_text="4.0 mínimo",
-            annotation_font_color="red",
-            annotation_position="top right"
-        )
+        fig_horiz.add_vline(x=4.0, line_dash="dash", line_color="red", line_width=1.5,
+                             annotation_text="4.0 mínimo",
+                             annotation_font_color="red",
+                             annotation_position="top right")
         fig_horiz.update_layout(
             height=max(200, len(df_res_show) * 55 + 80),
             xaxis_title="Promedio acumulado",
@@ -832,11 +782,11 @@ with tab3:
         )
         st.plotly_chart(fig_horiz, use_container_width=True)
         st.caption("🔴 Bajo mínimo · 🟠 Cerca del mínimo (< 4.5) · ◆ T3 predicho del grupo")
-
     else:
         st.success("Ninguna materia tiene promedio acumulado bajo o cerca del mínimo en el grupo seleccionado.")
+
 # ══════════════════════════════════════════════
-# TAB 4 — MODELO PREDICTIVO
+# TAB 4
 # ══════════════════════════════════════════════
 with tab4:
 
@@ -859,8 +809,7 @@ with tab4:
             .size().reset_index(name="n")
         )
         fig_pc = px.bar(
-            pred_cat, x="pred_label", y="n",
-            color="categoria",
+            pred_cat, x="pred_label", y="n", color="categoria",
             color_discrete_map={c: get_color(c) for c in ALERT_ORDER},
             labels={"pred_label": "Predicción modelo",
                     "n": "N° estudiantes", "categoria": "Categoría final"},
@@ -878,8 +827,7 @@ with tab4:
         df_conf = df_filtrado[["categoria", "confianza"]].copy()
         df_conf["confianza_pct"] = df_conf["confianza"] * 100
         fig_conf = px.box(
-            df_conf, x="categoria", y="confianza_pct",
-            color="categoria",
+            df_conf, x="categoria", y="confianza_pct", color="categoria",
             color_discrete_map={c: get_color(c) for c in ALERT_ORDER},
             labels={"categoria": "Categoría", "confianza_pct": "Confianza (%)"},
             height=340
@@ -904,6 +852,7 @@ with tab4:
         df_inc = df_inc.sort_values("incertidumbre_promedio", ascending=False)
         df_inc["confianza"] = (df_inc["confianza"] * 100).round(0).astype(str) + "%"
         df_inc["incertidumbre_promedio"] = df_inc["incertidumbre_promedio"].round(3)
+        df_inc["grade"] = df_inc["grade"].map(GRADO_LABEL)
         df_inc["categoria"] = df_inc["categoria"].apply(
             lambda x: f"{ALERT_EMOJI.get(x,'')} {x}"
         )
@@ -914,9 +863,6 @@ with tab4:
         })
         st.dataframe(df_inc.head(20), use_container_width=True, hide_index=True)
 
-# ─────────────────────────────────────────────
-# FOOTER
-# ─────────────────────────────────────────────
 st.divider()
 st.markdown(
     "<div style='text-align:center; color:#999; font-size:0.8em'>"
