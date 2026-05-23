@@ -489,13 +489,12 @@ with tab2:
                     key=f"ing_{idx}"
                 )
 
-                labels   = [SUBJECT_LABELS[s] for s in subs_disp]
-                t3a_v    = [row.get(f"{s}_T3", 0) or 0 for s in subs_disp]
-                t3p_v    = [row.get(f"{s}_T3_pred", 0) or 0 for s in subs_disp]
+                labels  = [SUBJECT_LABELS[s] for s in subs_disp]
+                t3a_v   = [row.get(f"{s}_T3", 0) or 0 for s in subs_disp]
+                t3p_v   = [row.get(f"{s}_T3_pred", 0) or 0 for s in subs_disp]
 
                 COLOR_ACTIVO = "#27ae60"
                 COLOR_PRED   = "#a8d5b5"
-                COLOR_GRIS   = "#cccccc"
                 COLOR_MIN    = "#c0392b"
 
                 # T3 actual — desvanecer si no es inglés
@@ -504,15 +503,10 @@ with tab2:
                     for v, s in zip(t3a_v, subs_disp)
                 ]
 
-                # T3 predicho — None si no es inglés (desaparece el punto)
+                # T3 predicho — desvanecer si no es inglés
                 t3p_plot = [
-                    None if (highlight_ingles and s not in materias_ingles) else v
+                    v * 0.12 if (highlight_ingles and s not in materias_ingles) else v
                     for v, s in zip(t3p_v, subs_disp)
-                ]
-                t3p_colors = [
-                    COLOR_GRIS if (highlight_ingles and s not in materias_ingles)
-                    else COLOR_PRED
-                    for s in subs_disp
                 ]
 
                 fig_radar = go.Figure()
@@ -538,18 +532,14 @@ with tab2:
                     hovertemplate='<b>%{theta}</b><br>T3 actual: %{r:.2f}<extra></extra>'
                 ))
 
-                # T3 predicho — solo puntos diamante
+                # T3 predicho — línea punteada + relleno tenue
                 fig_radar.add_trace(go.Scatterpolar(
-                    r=t3p_plot,
-                    theta=labels,
-                    mode='markers',
+                    r=t3p_plot + [t3p_plot[0]],
+                    theta=labels + [labels[0]],
+                    fill='toself',
+                    fillcolor='rgba(168,213,181,0.15)',
                     name='T3 predicho',
-                    marker=dict(
-                        color=t3p_colors,
-                        size=10,
-                        symbol='diamond',
-                        line=dict(color='white', width=1.5)
-                    ),
+                    line=dict(color=COLOR_PRED, dash='dot', width=2),
                     showlegend=True,
                     hovertemplate='<b>%{theta}</b><br>T3 pred: %{r:.2f}<extra></extra>'
                 ))
