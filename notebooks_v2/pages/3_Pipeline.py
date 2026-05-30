@@ -23,7 +23,7 @@ with tab1:
     def caja(col, emoji, titulo, detalle, color_borde, color_texto):
         col.markdown(f"""
         <div style="border:2px solid {color_borde};border-radius:10px;
-                    padding:14px 8px;text-align:center;height:130px">
+                    padding:14px 8px;text-align:center;min-height:130px">
             <div style="font-size:1.6em">{emoji}</div>
             <div style="font-weight:700;color:{color_texto};margin-top:4px;font-size:0.95em">{titulo}</div>
             <div style="font-size:0.72em;color:#666;margin-top:4px;line-height:1.5">{detalle}</div>
@@ -43,7 +43,14 @@ with tab1:
     flecha(cols[5])
     caja(cols[6], "🥇", "Silver",    "EDA · Modelo<br>Alertas · CSV<br>dashboard","#2ecc71", "#27ae60")
     flecha(cols[7])
-    caja(cols[8], "📊", "Dashboard", "Streamlit<br>Vermont EWS<br>vmt-ews-acad", "#9b59b6", "#8e44ad")
+    def caja(col, emoji, titulo, detalle, color_borde, color_texto):
+        col.markdown(f"""
+        <div style="border:2px solid {color_borde};border-radius:10px;
+                    padding:14px 8px;text-align:center;min-height:130px">
+            <div style="font-size:1.6em">{emoji}</div>
+            <div style="font-weight:700;color:{color_texto};margin-top:4px;font-size:0.95em">{titulo}</div>
+            <div style="font-size:0.72em;color:#666;margin-top:4px;line-height:1.5">{detalle}</div>
+        </div>""", unsafe_allow_html=True)(cols[8], "📊", "Dashboard", "Streamlit<br>Vermont EWS<br>vmt-ews-acad", "#9b59b6", "#8e44ad")
 
     st.divider()
     st.markdown("### Stack tecnológico")
