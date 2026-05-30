@@ -86,12 +86,12 @@ with tab1:
     st.divider()
     st.markdown("### Zonas del datalake")
     df_zonas = pd.DataFrame([
-        {"Zona": "🥉 Bronze / raw",      "Ruta": "bronze/raw/{año}/",      "Formato": "XLS",          "Contenido": "Archivos originales exportados de Phidias"},
-        {"Zona": "🥉 Bronze / anon",     "Ruta": "bronze/anon/{año}/",     "Formato": "CSV",          "Contenido": "Datos anonimizados (SHA-256 en student_id, secciones recodificadas)"},
-        {"Zona": "🥉 Bronze / prepared", "Ruta": "bronze/prepared/",       "Formato": "Parquet",      "Contenido": "Asignaturas unificadas entre cohortes"},
-        {"Zona": "🥈 Trusted",           "Ruta": "trusted/",               "Formato": "Parquet",      "Contenido": "Dataset de entrenamiento (2024-25) y predicción (2025-26)"},
-        {"Zona": "🥇 Silver",            "Ruta": "silver/",                "Formato": "Parquet / CSV","Contenido": "EDA, modelo entrenado, alertas, dashboard_data.csv"},
-        {"Zona": "🔒 Privado",           "Ruta": "privado/",               "Formato": "CSV",          "Contenido": "Tabla de mapeo real (student_id real ↔ hash) — solo en Databricks"},
+        {"Zona": "🥉 Bronze / raw",      "Ruta": "/Volumes/workspace/vermont/bronze/raw/{año}/",      "Formato": "XLS",          "Contenido": "Archivos originales exportados de Phidias"},
+        {"Zona": "🥉 Bronze / anon",     "Ruta": "/Volumes/workspace/vermont/bronze/anon/{año}/",     "Formato": "CSV",          "Contenido": "Datos anonimizados (SHA-256 en student_id, secciones recodificadas)"},
+        {"Zona": "🥉 Bronze / prepared", "Ruta": "/Volumes/workspace/vermont/bronze/prepared/",       "Formato": "Parquet",      "Contenido": "Asignaturas unificadas entre cohortes"},
+        {"Zona": "🥈 Trusted",           "Ruta": "/Volumes/workspace/vermont/trusted/",               "Formato": "Parquet",      "Contenido": "Dataset de entrenamiento (2024-25) y predicción (2025-26)"},
+        {"Zona": "🥇 Silver",            "Ruta": "/Volumes/workspace/vermont/silver/",                "Formato": "Parquet / CSV","Contenido": "EDA, modelo entrenado, alertas, dashboard_data.csv"},
+        {"Zona": "🔒 Privado",           "Ruta": "/Volumes/workspace/vermont/privado/",               "Formato": "CSV",          "Contenido": "Tabla de mapeo real (student_id real ↔ hash) — solo en Databricks"},
     ])
     st.dataframe(df_zonas, use_container_width=True, hide_index=True)
 
