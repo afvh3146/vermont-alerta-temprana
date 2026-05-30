@@ -132,36 +132,48 @@ with tab2:
     st.caption("Desde la exportación manual en Phidias hasta las alertas en el dashboard")
 
     pasos = [
-        ("1", "#e67e22", "📥 Extracción",
+        ("1", "#e67e22", "📥 Extracción · 00_anonymizer",
          "Exportación manual de reportes XLS desde Phidias (notas, asistencia, seguimientos). "
+         "Los archivos se guardan con fecha en el nombre: notas_{fecha}.xls, asistencia_{fecha}.xls. "
+         "El histórico de raw queda naturalmente por acumulación de archivos con fecha distinta. "
          "Se explora viabilidad de conexión vía API RESTful para automatizar en versiones futuras."),
-        ("2", "#e74c3c", "🔒 Anonimización",
+        ("2", "#e74c3c", "🔒 Anonimización · 00_anonymizer",
          "Pseudonimización del student_id real con SHA-256. Recodificación aleatoria de secciones "
          "(A/B → S1/S2) y docentes (P01, P02…). Supresión de texto libre en F2/F3. "
+         "Salida: CSV anonimizados en Bronze/anon/{fecha}.csv. "
          "El mapeo real se guarda en zona privada de Databricks — nunca sale del entorno."),
-        ("3", "#f39c12", "🥉 Bronze",
-         "Carga de XLS originales (raw), CSV anonimizados (anon) y Parquet con asignaturas "
-         "unificadas entre cohortes (prepared). Normalización de escala de notas si se integran "
-         "datos 2023-24 (escala 1-10 → 1-7)."),
-        ("4", "#3498db", "🥈 Trusted",
-         "Preparación del dataset de entrenamiento (2024-25, 117 estudiantes) y del dataset "
-         "de predicción (2025-26, 149 estudiantes). Feature engineering: delta T1→T2 por "
-         "asignatura, índice disciplinario ponderado (F1×1 + F2×3), variables de resumen."),
-        ("5", "#27ae60", "🥇 Silver — Modelado",
+        ("3", "#f39c12", "🥉 Bronze · 01_bronze_preparation",
+         "Unificación de asignaturas entre cohortes y normalización de estructura. "
+         "Bronze/raw: XLS originales con fecha — histórico natural por acumulación. "
+         "Bronze/anon: CSV anonimizados con fecha. "
+         "Bronze/prepared: Parquet unificado — overwrite sin histórico, regenerable desde raw en cualquier momento. "
+         "Normalización de escala si se integran datos 2023-24 (1-10 → 1-7)."),
+        ("4", "#3498db", "🥈 Trusted · 02_trusted_features",
+         "Preparación del dataset de entrenamiento (2024-25, 117 estudiantes) y predicción "
+         "(2025-26, 149 estudiantes). Feature engineering: delta T1→T2 por asignatura, "
+         "índice disciplinario ponderado (F1×1 + F2×3), variables de resumen."),
+        ("4.1", "#2980b9", "📦 Versionado Trusted",
+         "Antes de sobreescribir, la versión anterior se archiva automáticamente en "
+         "Trusted/historico/{nombre}_{fecha_tag}. Permite auditar cualquier versión del "
+         "dataset de entrenamiento o predicción."),
+        ("5", "#27ae60", "🥇 Silver — Modelado · 03_predictive_model",
          "Entrenamiento del clasificador de riesgo (RF, umbral 0.30) y del regresor de nota T3 "
          "(RF multi-output). Generación de probabilidades, intervalos P10-P90, categoría de "
          "alerta y perfil de cluster (K-Means). "
-         "Archivos generados: predictions_25_26, t3_predictions_25_26, t3_intervals_25_26, "
-         "clusters_25_26, early_alerts. Salida final: dashboard_data.csv con 127 columnas."),
-        ("5.1", "#1a8a5a", "📦 Versionado histórico",
-         "Antes de cada sobreescritura, el archivo actual se mueve automáticamente a "
-         "silver/historico/{nombre}_{fecha_tag}. Cada ejecución semanal genera una versión "
-         "nueva conservando el histórico completo — permite rastrear la evolución del riesgo "
-         "estudiante a estudiante entre barridos."),
-        ("6", "#9b59b6", "📊 Visualización",
-         "dashboard_data.csv se publica en GitHub y se consume desde Streamlit Cloud. "
-         "El dashboard se ejecuta semanalmente durante el trimestre académico. "
-         "Sin datos reales en tránsito — solo el CSV anonimizado."),
+         "Archivos: predictions_25_26, t3_predictions_25_26, t3_intervals_25_26, clusters_25_26."),
+        ("5.1", "#1a8a5a", "📦 Versionado Silver — Modelado",
+         "Antes de sobreescribir, cada archivo se archiva en Silver/historico/{nombre}_{fecha_tag}. "
+         "Permite rastrear la evolución de las predicciones entre barridos semanales."),
+        ("5.2", "#16a085", "🚨 Alertas · 04_early_alert",
+         "Generación de categorías de alerta (Riesgo Confirmado, Punto Ciego, Riesgo Teórico, "
+         "Sin Riesgo). Salida: Silver/early_alerts + dashboard_data.csv con 127 columnas. "
+         "Snapshot con fecha guardado en Silver/snapshots/dashboard_data_{fecha_tag}.csv "
+         "y publicado en GitHub/notebooks_v2/snapshots/."),
+        ("6", "#9b59b6", "📊 Visualización · Streamlit Cloud",
+         "dashboard_data.csv se consume desde Streamlit Cloud vía GitHub. "
+         "El pipeline se ejecuta semanalmente durante el trimestre académico. "
+         "Sin datos reales en tránsito — solo el CSV anonimizado. "
+         "Histórico de snapshots disponible en GitHub para comparar evolución entre cortes."),
     ]
 
     for num, color, titulo, desc in pasos:
