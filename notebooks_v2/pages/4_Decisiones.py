@@ -237,8 +237,10 @@ with tab2:
 
     st.markdown("### Curva de ganancia acumulada")
     st.caption(
-        "¿Cuántos estudiantes en riesgo real capturo si intervengo solo los N más prioritarios? "
-        "El modelo ordena por probabilidad de riesgo — la curva muestra la eficiencia de esa priorización."
+        "El modelo ordena los estudiantes de mayor a menor probabilidad de riesgo. "
+        "La curva muestra cuántos estudiantes en riesgo real captura si interviene "
+        "solo los N más prioritarios — vs. elegirlos al azar. "
+        "**Cuanto más alejada del baseline gris, más eficiente es el modelo para concentrar recursos.**"
     )
 
     df_gain = df_g.copy()
@@ -246,11 +248,14 @@ with tab2:
         ["Riesgo Confirmado", "Punto Ciego"]
     ).astype(int)
     df_gain = df_gain.sort_values("proba_critical", ascending=False).reset_index(drop=True)
-    df_gain["rank"]       = df_gain.index + 1
-    df_gain["gain"]       = df_gain["es_riesgo"].cumsum()
-    df_gain["gain_pct"]   = df_gain["gain"] / df_gain["es_riesgo"].sum() * 100
+    df_gain["rank"]     = df_gain.index + 1
+    df_gain["gain"]     = df_gain["es_riesgo"].cumsum()
+    df_gain["gain_pct"] = df_gain["gain"] / df_gain["es_riesgo"].sum() * 100
 
-    total_riesgo = df_gain["es_riesgo"].sum()
+    total_riesgo     = df_gain["es_riesgo"].sum()
+    total_confirmado = (df_g["categoria"] == "Riesgo Confirmado").sum()
+    total_ciego      = (df_g["categoria"] == "Punto Ciego").sum()
+    total_teorico    = (df_g["categoria"] == "Riesgo Teórico").sum()
 
     fig_gain = go.Figure()
     fig_gain.add_trace(go.Scatter(
@@ -269,7 +274,7 @@ with tab2:
         line=dict(color="#2ecc71", dash="dot", width=1.5)
     ))
     fig_gain.update_layout(
-        height=400,
+        height=380,
         xaxis=dict(title="N° estudiantes intervenidos", gridcolor="#f0f0f0"),
         yaxis=dict(title="% estudiantes en riesgo capturados",
                    range=[0, 105], gridcolor="#f0f0f0"),
@@ -281,48 +286,90 @@ with tab2:
 
     st.divider()
 
-    st.markdown("### Lista priorizada de intervención")
-    st.caption("Ajusta cuántos estudiantes puedes atender esta semana.")
-
-    max_est  = min(40, len(df_g))
-    capacidad = st.slider(
-        "Capacidad de intervención (N estudiantes)",
-        min_value=1, max_value=max_est, value=min(15, max_est),
-        help="Arrastra para ajustar cuántos estudiantes priorizarás esta semana"
+    # ── Sliders por rol ───────────────────────
+    st.markdown("### Asignación de intervenciones por rol")
+    st.caption(
+        "**Director Académico:** atiende Riesgo Confirmado y Punto Ciego. "
+        "**Directores de grupo:** cubren Riesgo Teórico en sus secciones."
     )
 
-    capturados  = df_gain.head(capacidad)["es_riesgo"].sum()
-    pct_captura = round(capturados / total_riesgo * 100, 1) if total_riesgo > 0 else 0
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        st.markdown("**🔴🟠 Tu capacidad (Director Académico)**")
+        max_da = total_confirmado + total_ciego
+        cap_da = st.slider(
+            "Estudiantes que atiendes tú",
+            min_value=0, max_value=int(max_da),
+            value=int(max_da),
+            key="slider_da"
+        )
+    with col_s2:
+        st.markdown("**🔵 Capacidad directores de grupo**")
+        max_dg = int(total_teorico)
+        cap_dg = st.slider(
+            "Estudiantes que cubren los directores",
+            min_value=0, max_value=max_dg,
+            value=min(10, max_dg),
+            key="slider_dg"
+        )
 
-    col_a, col_b, col_c = st.columns(3)
-    col_a.metric("Estudiantes a intervenir", capacidad)
-    col_b.metric("En riesgo real capturados", capturados)
-    col_c.metric("% del riesgo total cubierto", f"{pct_captura}%")
-
+    # ── Métricas ──────────────────────────────
     st.markdown("&nbsp;")
+    pct_da = round(cap_da / max_da * 100, 1) if max_da > 0 else 0
+    pct_dg = round(cap_dg / max_dg * 100, 1) if max_dg > 0 else 0
 
-    df_prior = df_gain.head(capacidad).copy()
-    cols_show = ["rank", "student_id", "grado_label", "categoria",
-                 "proba_critical", "n_bajo_acumulada", "marcador_LSC"]
-    cols_show = [c for c in cols_show if c in df_prior.columns]
-    df_prior_show = df_prior[cols_show].copy()
-    df_prior_show["categoria"] = df_prior_show["categoria"].apply(
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total intervenidos", cap_da + cap_dg)
+    m2.metric("Riesgo confirmado + ciego cubierto", f"{pct_da}%",
+              delta=f"{cap_da} de {int(max_da)}")
+    m3.metric("Riesgo teórico cubierto", f"{pct_dg}%",
+              delta=f"{cap_dg} de {max_dg}")
+    m4.metric("Estudiantes sin intervención", len(df_g) - cap_da - cap_dg)
+
+    st.divider()
+
+    # ── Lista unificada ───────────────────────
+    st.markdown("### Lista unificada de intervención")
+
+    # Construir lista DA: top cap_da de confirmados + ciegos ordenados por proba
+    df_da = df_g[df_g["categoria"].isin(["Riesgo Confirmado", "Punto Ciego"])].copy()
+    df_da = df_da.sort_values("proba_critical", ascending=False).head(cap_da)
+    df_da["Responsable"] = "Director Académico"
+    df_da["_prioridad"]  = range(1, len(df_da) + 1)
+
+    # Construir lista DG: top cap_dg de teóricos ordenados por proba, con sección
+    df_dg = df_g[df_g["categoria"] == "Riesgo Teórico"].copy()
+    df_dg = df_dg.sort_values("proba_critical", ascending=False).head(cap_dg)
+    df_dg["Responsable"] = "Dir. grupo " + df_dg["grado_str"] + "-" + df_dg["seccion"]
+    df_dg["_prioridad"]  = range(1, len(df_dg) + 1)
+
+    df_lista = pd.concat([df_da, df_dg], ignore_index=True)
+    df_lista = df_lista.sort_values(
+        ["categoria", "proba_critical"],
+        ascending=[True, False]
+    ).reset_index(drop=True)
+
+    cols_show = ["student_id", "grado_label", "categoria",
+                 "proba_critical", "n_bajo_acumulada", "marcador_LSC", "Responsable"]
+    cols_show = [c for c in cols_show if c in df_lista.columns]
+    df_show = df_lista[cols_show].copy()
+
+    df_show["categoria"] = df_show["categoria"].apply(
         lambda x: f"{ALERT_EMOJI.get(x,'')} {x}"
     )
-    df_prior_show["proba_critical"] = df_prior_show["proba_critical"].apply(
-        lambda x: f"{x:.0%}"
-    )
-    df_prior_show["marcador_LSC"] = df_prior_show["marcador_LSC"].map({1: "✓", 0: ""})
-    df_prior_show = df_prior_show.rename(columns={
-        "rank":            "Prioridad",
-        "student_id":      "ID",
-        "grado_label":     "Grado",
-        "categoria":       "Categoría",
-        "proba_critical":  "P(crítico)",
-        "n_bajo_acumulada":"Mat. < 4.0",
-        "marcador_LSC":    "LSC"
+    df_show["proba_critical"] = df_show["proba_critical"].apply(lambda x: f"{x:.0%}")
+    df_show["marcador_LSC"]   = df_show["marcador_LSC"].map({1: "✓", 0: ""})
+    df_show = df_show.rename(columns={
+        "student_id":       "ID",
+        "grado_label":      "Grado",
+        "categoria":        "Categoría",
+        "proba_critical":   "P(crítico)",
+        "n_bajo_acumulada": "Mat. < 4.0",
+        "marcador_LSC":     "LSC",
     })
 
-    st.markdown(f"**Top {capacidad} estudiantes a intervenir — ordenados por riesgo**")
-    st.dataframe(df_prior_show, use_container_width=True, hide_index=True, height=420)
-    st.caption("Ordenado por probabilidad de riesgo crítico (modelo RF, umbral 0.30)")
+    st.dataframe(df_show, use_container_width=True, hide_index=True, height=460)
+    st.caption(
+        "🔴🟠 Director Académico · 🔵 Director de grupo por sección · "
+        "Ordenado por categoría y probabilidad de riesgo"
+    )
