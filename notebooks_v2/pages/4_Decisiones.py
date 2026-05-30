@@ -250,18 +250,20 @@ with tab2:
     total_ciego      = int((df_g["categoria"] == "Punto Ciego").sum())
     total_teorico    = int((df_g["categoria"] == "Riesgo Teórico").sum())
     total_da_max     = total_confirmado + total_ciego
-    secciones        = sorted(df_g["seccion"].unique().tolist())
+
+    # Grupos reales: combinación grado + sección
+    df_g["grupo"] = df_g["grado_str"].astype(str) + "-" + df_g["seccion"].astype(str)
+    grupos = sorted(df_g["grupo"].unique().tolist())
 
     # ── Resumen global ─────────────────────────
     st.markdown("### Eficiencia del modelo — curva de ganancia")
     st.caption(f"Middle School · {len(df_g)} estudiantes · {total_riesgo + total_teorico} en riesgo activo")
 
-    # Calcular punto 80% en modelo vs azar
     if total_riesgo > 0:
-        target_80    = total_riesgo * 0.80
-        n_modelo_80  = int(df_gain[df_gain["gain"] >= target_80]["rank"].min())
-        n_azar_80    = int(round(len(df_g) * 0.80))
-        ganancia     = round(n_azar_80 / max(n_modelo_80, 1), 1)
+        target_80   = total_riesgo * 0.80
+        n_modelo_80 = int(df_gain[df_gain["gain"] >= target_80]["rank"].min())
+        n_azar_80   = int(round(len(df_g) * 0.80))
+        ganancia    = round(n_azar_80 / max(n_modelo_80, 1), 1)
     else:
         n_modelo_80 = 0; n_azar_80 = 0; ganancia = 0
 
@@ -278,7 +280,6 @@ with tab2:
     st.divider()
 
     # ── Slider DA ──────────────────────────────
-    st.markdown("### Asignación de intervenciones")
     st.markdown("**🔴🟠 Director Académico**")
     st.caption("Atiende Riesgo Confirmado y Punto Ciego — prioridad máxima")
 
@@ -289,18 +290,34 @@ with tab2:
         key="slider_da"
     )
 
-    # Estudiantes DA: top cap_da confirmados+ciegos por proba
+    # Pool DA y desbordados
     df_da_pool = df_g[df_g["categoria"].isin(["Riesgo Confirmado","Punto Ciego"])]\
                  .sort_values("proba_critical", ascending=False).reset_index(drop=True)
-    df_da      = df_da_pool.head(cap_da).copy()
-    df_da["Responsable"] = "Director Académico"
+    df_da         = df_da_pool.head(cap_da).copy()
+    df_desbordados = df_da_pool.iloc[cap_da:].copy() \
+                     if cap_da < len(df_da_pool) else pd.DataFrame()
 
-    # Desbordados: confirmados+ciegos que DA no alcanzó
-    df_desbordados = df_da_pool.iloc[cap_da:].copy() if cap_da < len(df_da_pool) else pd.DataFrame()
+    # Total HRT desde session state
+    total_hrt_interv = sum([
+        st.session_state.get(f"slider_hrt_{grupo}", 0)
+        for grupo in grupos
+    ])
+    total_interv     = cap_da + total_hrt_interv
+    pct_da_cub       = round(cap_da / max(total_da_max, 1) * 100, 1)
+    pct_hrt_cub      = round(total_hrt_interv / max(total_teorico, 1) * 100, 1)
+    sin_cubrir       = max(0, (total_da_max - cap_da) + (total_teorico - total_hrt_interv))
+
+    # ── Métricas globales ──────────────────────
+    st.divider()
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total intervenidos", total_interv)
+    m2.metric("Confirmado + ciego cubierto", f"{pct_da_cub}%",
+              delta=f"{cap_da} de {total_da_max}")
+    m3.metric("Teórico cubierto", f"{pct_hrt_cub}%",
+              delta=f"{total_hrt_interv} de {total_teorico}")
+    m4.metric("En riesgo sin cubrir", sin_cubrir)
 
     # ── Curva con líneas verticales ────────────
-    total_hrt_cap = 0  # se calcula después de los sliders HRT
-
     fig_gain = go.Figure()
     fig_gain.add_trace(go.Scatter(
         x=df_gain["rank"], y=df_gain["gain_pct"],
@@ -320,47 +337,27 @@ with tab2:
 
     # Línea vertical DA
     pct_da_curva = float(df_gain[df_gain["rank"] == max(cap_da, 1)]["gain_pct"].values[0]) \
-                   if cap_da > 0 and cap_da <= len(df_gain) else 0
-    fig_gain.add_vline(
-        x=cap_da, line_dash="dash", line_color="#e74c3c", line_width=2,
-        annotation_text=f"DA: {cap_da} est. → {pct_da_curva:.0f}%",
-        annotation_position="top left",
-        annotation_font_color="#e74c3c", annotation_font_size=11
-    )
-
-    # Sliders HRT — necesitamos calcularlos antes de actualizar la curva
-    # Los definimos en un expander debajo y usamos session_state
-    st.divider()
-
-    # ── Métricas globales ──────────────────────
-    # Calculamos total HRT desde sliders (si existen en session state)
-    total_hrt_interv = sum([
-        st.session_state.get(f"slider_hrt_{sec}", 0)
-        for sec in secciones
-    ])
-    total_interv  = cap_da + total_hrt_interv
-    pct_da_cub    = round(cap_da / max(total_da_max, 1) * 100, 1)
-    pct_hrt_cub   = round(total_hrt_interv / max(total_teorico, 1) * 100, 1)
-    sin_cubrir    = max(0, (total_da_max - cap_da) + (total_teorico - total_hrt_interv))
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total intervenidos", total_interv)
-    m2.metric("Confirmado + ciego cubierto", f"{pct_da_cub}%",
-              delta=f"{cap_da} de {total_da_max}")
-    m3.metric("Teórico cubierto", f"{pct_hrt_cub}%",
-              delta=f"{total_hrt_interv} de {total_teorico}")
-    m4.metric("En riesgo sin cubrir", sin_cubrir)
+                   if 0 < cap_da <= len(df_gain) else 0.0
+    if cap_da > 0:
+        fig_gain.add_vline(
+            x=cap_da, line_dash="dash", line_color="#e74c3c", line_width=2,
+            annotation_text=f"DA: {cap_da} → {pct_da_curva:.0f}%",
+            annotation_position="top left",
+            annotation_font_color="#e74c3c", annotation_font_size=11
+        )
 
     # Línea vertical DA + HRT
-    rank_total = min(total_interv, len(df_gain))
+    rank_total      = min(total_interv, len(df_gain))
     pct_total_curva = float(df_gain[df_gain["rank"] == max(rank_total, 1)]["gain_pct"].values[0]) \
-                      if rank_total > 0 else 0
-    fig_gain.add_vline(
-        x=total_interv, line_dash="dash", line_color="#3498db", line_width=2,
-        annotation_text=f"DA+HRT: {total_interv} est. → {pct_total_curva:.0f}%",
-        annotation_position="top right",
-        annotation_font_color="#3498db", annotation_font_size=11
-    )
+                      if rank_total > 0 else 0.0
+    if total_interv > 0 and total_interv != cap_da:
+        fig_gain.add_vline(
+            x=total_interv, line_dash="dash", line_color="#3498db", line_width=2,
+            annotation_text=f"DA+HRT: {total_interv} → {pct_total_curva:.0f}%",
+            annotation_position="top right",
+            annotation_font_color="#3498db", annotation_font_size=11
+        )
+
     fig_gain.update_layout(
         height=380,
         xaxis=dict(title="N° estudiantes intervenidos", gridcolor="#f0f0f0"),
@@ -387,7 +384,8 @@ with tab2:
     else:
         df_da_show = df_da[["student_id","grado_label","categoria",
                              "proba_critical","n_bajo_acumulada","marcador_LSC"]].copy()
-        df_da_show["categoria"]      = df_da_show["categoria"].apply(lambda x: f"{ALERT_EMOJI.get(x,'')} {x}")
+        df_da_show["categoria"]      = df_da_show["categoria"].apply(
+            lambda x: f"{ALERT_EMOJI.get(x,'')} {x}")
         df_da_show["proba_critical"] = df_da_show["proba_critical"].apply(lambda x: f"{x:.0%}")
         df_da_show["marcador_LSC"]   = df_da_show["marcador_LSC"].map({1:"✓", 0:""})
         df_da_show = df_da_show.rename(columns={
@@ -401,39 +399,47 @@ with tab2:
     st.markdown("**🔵 Directores de grupo (HRT)**")
     st.caption("Cada HRT atiende primero los desbordados del DA de su sección, luego sus teóricos")
 
-    # Dividir secciones en filas de 3
-    secciones_lista = list(secciones)
-    filas = [secciones_lista[i:i+3] for i in range(0, len(secciones_lista), 3)]
+    filas = [grupos[i:i+3] for i in range(0, len(grupos), 3)]
 
     for fila in filas:
         cols_hrt = st.columns(3)
-        for j, sec in enumerate(fila):
+        for j, grupo in enumerate(fila):
             with cols_hrt[j]:
-                desb_sec = df_desbordados[df_desbordados["seccion"] == sec] \
-                           if not df_desbordados.empty else pd.DataFrame()
+                grado_str = grupo.split("-")[0]
+                sec_str   = grupo.split("-")[1]
+                grado_num = GRADO_MAP[grado_str]
+
+                desb_sec = df_desbordados[
+                    (df_desbordados["seccion"] == sec_str) &
+                    (df_desbordados["grade"] == grado_num)
+                ] if not df_desbordados.empty else pd.DataFrame()
+
                 teor_sec = df_g[
                     (df_g["categoria"] == "Riesgo Teórico") &
-                    (df_g["seccion"] == sec)
+                    (df_g["seccion"] == sec_str) &
+                    (df_g["grade"] == grado_num)
                 ].sort_values("proba_critical", ascending=False)
 
-                n_desb    = len(desb_sec)
-                n_teor    = len(teor_sec)
-                n_conf_sec = int((df_g[df_g["seccion"]==sec]["categoria"] == "Riesgo Confirmado").sum())
-                pool_hrt  = pd.concat([desb_sec, teor_sec], ignore_index=True)
-
-                grado_sec = df_g[df_g["seccion"]==sec]["grado_str"].iloc[0] \
-                            if len(df_g[df_g["seccion"]==sec]) > 0 else "?"
+                n_desb     = len(desb_sec)
+                n_teor     = len(teor_sec)
+                n_conf_sec = int((
+                    df_g[
+                        (df_g["seccion"] == sec_str) &
+                        (df_g["grade"] == grado_num)
+                    ]["categoria"] == "Riesgo Confirmado"
+                ).sum())
+                pool_hrt = pd.concat([desb_sec, teor_sec], ignore_index=True)
 
                 st.markdown(
-                    f"**{grado_sec}-{sec}** · {n_conf_sec} confirmados · {n_teor} teóricos"
+                    f"**{grupo}** · {n_conf_sec} confirmados · {n_teor} teóricos"
                     + (f" · ⚠️ {n_desb} desbordados" if n_desb > 0 else "")
                 )
 
                 cap_hrt = st.slider(
-                    f"Capacidad {grado_sec}-{sec}",
+                    f"Capacidad {grupo}",
                     min_value=0, max_value=max(len(pool_hrt), 1),
                     value=min(n_teor, 3),
-                    key=f"slider_hrt_{sec}",
+                    key=f"slider_hrt_{grupo}",
                     label_visibility="collapsed"
                 )
 
@@ -443,8 +449,9 @@ with tab2:
                         lambda x: "⚠️ Desbordado DA" if x in ["Riesgo Confirmado","Punto Ciego"]
                         else f"{ALERT_EMOJI.get(x,'')} Teórico"
                     )
-                    df_hrt_show["P(crítico)"] = df_hrt_show["proba_critical"].apply(lambda x: f"{x:.0%}")
-                    df_hrt_show["LSC"]        = df_hrt_show["marcador_LSC"].map({1:"✓", 0:""})
+                    df_hrt_show["P(crítico)"] = df_hrt_show["proba_critical"].apply(
+                        lambda x: f"{x:.0%}")
+                    df_hrt_show["LSC"] = df_hrt_show["marcador_LSC"].map({1:"✓", 0:""})
                     st.dataframe(
                         df_hrt_show[["student_id","Tipo","P(crítico)","LSC"]].rename(
                             columns={"student_id":"ID"}
