@@ -150,7 +150,14 @@ with tab2:
         ("5", "#27ae60", "🥇 Silver — Modelado",
          "Entrenamiento del clasificador de riesgo (RF, umbral 0.30) y del regresor de nota T3 "
          "(RF multi-output). Generación de probabilidades, intervalos P10-P90, categoría de "
-         "alerta y perfil de cluster (K-Means). Salida: dashboard_data.csv con 127 columnas."),
+         "alerta y perfil de cluster (K-Means). "
+         "Archivos generados: predictions_25_26, t3_predictions_25_26, t3_intervals_25_26, "
+         "clusters_25_26, early_alerts. Salida final: dashboard_data.csv con 127 columnas."),
+        ("5.1", "#1a8a5a", "📦 Versionado histórico",
+         "Antes de cada sobreescritura, el archivo actual se mueve automáticamente a "
+         "silver/historico/{nombre}_{fecha_tag}. Cada ejecución semanal genera una versión "
+         "nueva conservando el histórico completo — permite rastrear la evolución del riesgo "
+         "estudiante a estudiante entre barridos."),
         ("6", "#9b59b6", "📊 Visualización",
          "dashboard_data.csv se publica en GitHub y se consume desde Streamlit Cloud. "
          "El dashboard se ejecuta semanalmente durante el trimestre académico. "
