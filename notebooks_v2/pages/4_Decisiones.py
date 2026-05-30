@@ -235,14 +235,7 @@ with tab1:
 # ══════════════════════════════════════════════
 with tab2:
 
-    st.markdown("### Curva de ganancia acumulada")
-    st.caption(
-        "El modelo ordena los estudiantes de mayor a menor probabilidad de riesgo. "
-        "La curva muestra cuántos estudiantes en riesgo real captura si interviene "
-        "solo los N más prioritarios — vs. elegirlos al azar. "
-        "**Cuanto más alejada del baseline gris, más eficiente es el modelo para concentrar recursos.**"
-    )
-
+    # ── Datos base ─────────────────────────────
     df_gain = df_g.copy()
     df_gain["es_riesgo"] = df_gain["categoria"].isin(
         ["Riesgo Confirmado", "Punto Ciego"]
@@ -250,12 +243,63 @@ with tab2:
     df_gain = df_gain.sort_values("proba_critical", ascending=False).reset_index(drop=True)
     df_gain["rank"]     = df_gain.index + 1
     df_gain["gain"]     = df_gain["es_riesgo"].cumsum()
-    df_gain["gain_pct"] = df_gain["gain"] / df_gain["es_riesgo"].sum() * 100
+    df_gain["gain_pct"] = df_gain["gain"] / max(df_gain["es_riesgo"].sum(), 1) * 100
 
-    total_riesgo     = df_gain["es_riesgo"].sum()
-    total_confirmado = (df_g["categoria"] == "Riesgo Confirmado").sum()
-    total_ciego      = (df_g["categoria"] == "Punto Ciego").sum()
-    total_teorico    = (df_g["categoria"] == "Riesgo Teórico").sum()
+    total_riesgo     = int(df_gain["es_riesgo"].sum())
+    total_confirmado = int((df_g["categoria"] == "Riesgo Confirmado").sum())
+    total_ciego      = int((df_g["categoria"] == "Punto Ciego").sum())
+    total_teorico    = int((df_g["categoria"] == "Riesgo Teórico").sum())
+    total_da_max     = total_confirmado + total_ciego
+    secciones        = sorted(df_g["seccion"].unique().tolist())
+
+    # ── Resumen global ─────────────────────────
+    st.markdown("### Eficiencia del modelo — curva de ganancia")
+    st.caption(f"Middle School · {len(df_g)} estudiantes · {total_riesgo + total_teorico} en riesgo activo")
+
+    # Calcular punto 80% en modelo vs azar
+    if total_riesgo > 0:
+        target_80    = total_riesgo * 0.80
+        n_modelo_80  = int(df_gain[df_gain["gain"] >= target_80]["rank"].min())
+        n_azar_80    = int(round(len(df_g) * 0.80))
+        ganancia     = round(n_azar_80 / max(n_modelo_80, 1), 1)
+    else:
+        n_modelo_80 = 0; n_azar_80 = 0; ganancia = 0
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("En riesgo activo", total_riesgo + total_teorico,
+              delta=f"{total_confirmado} confirmados · {total_teorico} teóricos")
+    c2.metric("Para cubrir 80% con modelo", f"~{n_modelo_80}",
+              delta="estudiantes")
+    c3.metric("Para cubrir 80% al azar", f"~{n_azar_80}",
+              delta="estudiantes")
+    c4.metric("Ganancia del modelo", f"{ganancia}×",
+              delta="más eficiente que el azar")
+
+    st.divider()
+
+    # ── Slider DA ──────────────────────────────
+    st.markdown("### Asignación de intervenciones")
+    st.markdown("**🔴🟠 Director Académico**")
+    st.caption("Atiende Riesgo Confirmado y Punto Ciego — prioridad máxima")
+
+    cap_da = st.slider(
+        "Capacidad DA",
+        min_value=0, max_value=max(total_da_max, 1),
+        value=min(total_da_max, 10),
+        key="slider_da"
+    )
+
+    # Estudiantes DA: top cap_da confirmados+ciegos por proba
+    df_da_pool = df_g[df_g["categoria"].isin(["Riesgo Confirmado","Punto Ciego"])]\
+                 .sort_values("proba_critical", ascending=False).reset_index(drop=True)
+    df_da      = df_da_pool.head(cap_da).copy()
+    df_da["Responsable"] = "Director Académico"
+
+    # Desbordados: confirmados+ciegos que DA no alcanzó
+    df_desbordados = df_da_pool.iloc[cap_da:].copy() if cap_da < len(df_da_pool) else pd.DataFrame()
+
+    # ── Curva con líneas verticales ────────────
+    total_hrt_cap = 0  # se calcula después de los sliders HRT
 
     fig_gain = go.Figure()
     fig_gain.add_trace(go.Scatter(
@@ -273,103 +317,136 @@ with tab2:
         mode="lines", name="Modelo perfecto",
         line=dict(color="#2ecc71", dash="dot", width=1.5)
     ))
+
+    # Línea vertical DA
+    pct_da_curva = float(df_gain[df_gain["rank"] == max(cap_da, 1)]["gain_pct"].values[0]) \
+                   if cap_da > 0 and cap_da <= len(df_gain) else 0
+    fig_gain.add_vline(
+        x=cap_da, line_dash="dash", line_color="#e74c3c", line_width=2,
+        annotation_text=f"DA: {cap_da} est. → {pct_da_curva:.0f}%",
+        annotation_position="top left",
+        annotation_font_color="#e74c3c", annotation_font_size=11
+    )
+
+    # Sliders HRT — necesitamos calcularlos antes de actualizar la curva
+    # Los definimos en un expander debajo y usamos session_state
+    st.divider()
+
+    # ── Métricas globales ──────────────────────
+    # Calculamos total HRT desde sliders (si existen en session state)
+    total_hrt_interv = sum([
+        st.session_state.get(f"slider_hrt_{sec}", 0)
+        for sec in secciones
+    ])
+    total_interv  = cap_da + total_hrt_interv
+    pct_da_cub    = round(cap_da / max(total_da_max, 1) * 100, 1)
+    pct_hrt_cub   = round(total_hrt_interv / max(total_teorico, 1) * 100, 1)
+    sin_cubrir    = max(0, (total_da_max - cap_da) + (total_teorico - total_hrt_interv))
+
+    m1, m2, m3, m4 = st.columns(4)
+    m1.metric("Total intervenidos", total_interv)
+    m2.metric("Confirmado + ciego cubierto", f"{pct_da_cub}%",
+              delta=f"{cap_da} de {total_da_max}")
+    m3.metric("Teórico cubierto", f"{pct_hrt_cub}%",
+              delta=f"{total_hrt_interv} de {total_teorico}")
+    m4.metric("En riesgo sin cubrir", sin_cubrir)
+
+    # Línea vertical DA + HRT
+    rank_total = min(total_interv, len(df_gain))
+    pct_total_curva = float(df_gain[df_gain["rank"] == max(rank_total, 1)]["gain_pct"].values[0]) \
+                      if rank_total > 0 else 0
+    fig_gain.add_vline(
+        x=total_interv, line_dash="dash", line_color="#3498db", line_width=2,
+        annotation_text=f"DA+HRT: {total_interv} est. → {pct_total_curva:.0f}%",
+        annotation_position="top right",
+        annotation_font_color="#3498db", annotation_font_size=11
+    )
     fig_gain.update_layout(
         height=380,
         xaxis=dict(title="N° estudiantes intervenidos", gridcolor="#f0f0f0"),
-        yaxis=dict(title="% estudiantes en riesgo capturados",
-                   range=[0, 105], gridcolor="#f0f0f0"),
+        yaxis=dict(title="% riesgo capturado", range=[0, 105], gridcolor="#f0f0f0"),
         legend=dict(orientation="h", yanchor="bottom", y=1.02),
         plot_bgcolor="white", paper_bgcolor="white",
-        margin=dict(l=50, r=20, t=50, b=50)
+        margin=dict(l=50, r=20, t=60, b=50)
     )
     st.plotly_chart(fig_gain, use_container_width=True)
 
+    st.markdown(f"""
+    <div style="background:#e6f1fb;border-left:3px solid #185FA5;border-radius:0 8px 8px 0;
+                padding:10px 14px;font-size:13px;color:#0C447C;line-height:1.6;margin-bottom:16px">
+        Con <b>{total_interv} intervenciones</b> ({cap_da} DA + {total_hrt_interv} HRT)
+        el sistema cubre el <b>{pct_total_curva:.0f}% del riesgo</b>.
+        Sin el modelo necesitarías intervenir ~{n_azar_80} estudiantes para cubrir el 80%.
+    </div>""", unsafe_allow_html=True)
+
+    # ── Lista DA ──────────────────────────────
     st.divider()
+    st.markdown(f"**Lista DA — top {cap_da} estudiantes**")
+    if df_da.empty:
+        st.info("DA sin intervenciones asignadas.")
+    else:
+        df_da_show = df_da[["student_id","grado_label","categoria",
+                             "proba_critical","n_bajo_acumulada","marcador_LSC"]].copy()
+        df_da_show["categoria"]      = df_da_show["categoria"].apply(lambda x: f"{ALERT_EMOJI.get(x,'')} {x}")
+        df_da_show["proba_critical"] = df_da_show["proba_critical"].apply(lambda x: f"{x:.0%}")
+        df_da_show["marcador_LSC"]   = df_da_show["marcador_LSC"].map({1:"✓", 0:""})
+        df_da_show = df_da_show.rename(columns={
+            "student_id":"ID","grado_label":"Grado","categoria":"Categoría",
+            "proba_critical":"P(crítico)","n_bajo_acumulada":"Mat.<4.0","marcador_LSC":"LSC"
+        })
+        st.dataframe(df_da_show, use_container_width=True, hide_index=True)
 
-    # ── Sliders por rol ───────────────────────
-    st.markdown("### Asignación de intervenciones por rol")
-    st.caption(
-        "**Director Académico:** atiende Riesgo Confirmado y Punto Ciego. "
-        "**Directores de grupo:** cubren Riesgo Teórico en sus secciones."
-    )
-
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        st.markdown("**🔴🟠 Tu capacidad (Director Académico)**")
-        max_da = total_confirmado + total_ciego
-        cap_da = st.slider(
-            "Estudiantes que atiendes tú",
-            min_value=0, max_value=int(max_da),
-            value=int(max_da),
-            key="slider_da"
-        )
-    with col_s2:
-        st.markdown("**🔵 Capacidad directores de grupo**")
-        max_dg = int(total_teorico)
-        cap_dg = st.slider(
-            "Estudiantes que cubren los directores",
-            min_value=0, max_value=max_dg,
-            value=min(10, max_dg),
-            key="slider_dg"
-        )
-
-    # ── Métricas ──────────────────────────────
-    st.markdown("&nbsp;")
-    pct_da = round(cap_da / max_da * 100, 1) if max_da > 0 else 0
-    pct_dg = round(cap_dg / max_dg * 100, 1) if max_dg > 0 else 0
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Total intervenidos", cap_da + cap_dg)
-    m2.metric("Riesgo confirmado + ciego cubierto", f"{pct_da}%",
-              delta=f"{cap_da} de {int(max_da)}")
-    m3.metric("Riesgo teórico cubierto", f"{pct_dg}%",
-              delta=f"{cap_dg} de {max_dg}")
-    m4.metric("Estudiantes sin intervención", len(df_g) - cap_da - cap_dg)
-
+    # ── Sliders y listas HRT ───────────────────
     st.divider()
+    st.markdown("**🔵 Directores de grupo (HRT)**")
+    st.caption("Cada HRT atiende primero los desbordados del DA de su sección, luego sus teóricos")
 
-    # ── Lista unificada ───────────────────────
-    st.markdown("### Lista unificada de intervención")
+    cols_hrt = st.columns(min(len(secciones), 3))
 
-    # Construir lista DA: top cap_da de confirmados + ciegos ordenados por proba
-    df_da = df_g[df_g["categoria"].isin(["Riesgo Confirmado", "Punto Ciego"])].copy()
-    df_da = df_da.sort_values("proba_critical", ascending=False).head(cap_da)
-    df_da["Responsable"] = "Director Académico"
-    df_da["_prioridad"]  = range(1, len(df_da) + 1)
+    for i, sec in enumerate(secciones):
+        col = cols_hrt[i % 3]
+        with col:
+            # Pool del HRT: desbordados de su sección + teóricos de su sección
+            desb_sec = df_desbordados[df_desbordados["seccion"] == sec] \
+                       if not df_desbordados.empty else pd.DataFrame()
+            teor_sec = df_g[
+                (df_g["categoria"] == "Riesgo Teórico") &
+                (df_g["seccion"] == sec)
+            ].sort_values("proba_critical", ascending=False)
 
-    # Construir lista DG: top cap_dg de teóricos ordenados por proba, con sección
-    df_dg = df_g[df_g["categoria"] == "Riesgo Teórico"].copy()
-    df_dg = df_dg.sort_values("proba_critical", ascending=False).head(cap_dg)
-    df_dg["Responsable"] = "Dir. grupo " + df_dg["grado_str"] + "-" + df_dg["seccion"]
-    df_dg["_prioridad"]  = range(1, len(df_dg) + 1)
+            n_desb = len(desb_sec)
+            n_teor = len(teor_sec)
+            n_conf_sec = int((df_g[df_g["seccion"]==sec]["categoria"] == "Riesgo Confirmado").sum())
+            pool_hrt = pd.concat([desb_sec, teor_sec], ignore_index=True)
 
-    df_lista = pd.concat([df_da, df_dg], ignore_index=True)
-    df_lista = df_lista.sort_values(
-        ["categoria", "proba_critical"],
-        ascending=[True, False]
-    ).reset_index(drop=True)
+            grado_sec = df_g[df_g["seccion"]==sec]["grado_str"].iloc[0] \
+                        if len(df_g[df_g["seccion"]==sec]) > 0 else "?"
 
-    cols_show = ["student_id", "grado_label", "categoria",
-                 "proba_critical", "n_bajo_acumulada", "marcador_LSC", "Responsable"]
-    cols_show = [c for c in cols_show if c in df_lista.columns]
-    df_show = df_lista[cols_show].copy()
+            st.markdown(f"**{grado_sec}-{sec}** · {n_conf_sec} confirmados · {n_teor} teóricos"
+                        + (f" · ⚠️ {n_desb} desbordados" if n_desb > 0 else ""))
 
-    df_show["categoria"] = df_show["categoria"].apply(
-        lambda x: f"{ALERT_EMOJI.get(x,'')} {x}"
-    )
-    df_show["proba_critical"] = df_show["proba_critical"].apply(lambda x: f"{x:.0%}")
-    df_show["marcador_LSC"]   = df_show["marcador_LSC"].map({1: "✓", 0: ""})
-    df_show = df_show.rename(columns={
-        "student_id":       "ID",
-        "grado_label":      "Grado",
-        "categoria":        "Categoría",
-        "proba_critical":   "P(crítico)",
-        "n_bajo_acumulada": "Mat. < 4.0",
-        "marcador_LSC":     "LSC",
-    })
+            cap_hrt = st.slider(
+                f"Capacidad {grado_sec}-{sec}",
+                min_value=0, max_value=max(len(pool_hrt), 1),
+                value=min(n_teor, 3),
+                key=f"slider_hrt_{sec}",
+                label_visibility="collapsed"
+            )
 
-    st.dataframe(df_show, use_container_width=True, hide_index=True, height=460)
-    st.caption(
-        "🔴🟠 Director Académico · 🔵 Director de grupo por sección · "
-        "Ordenado por categoría y probabilidad de riesgo"
-    )
+            df_hrt_show = pool_hrt.head(cap_hrt).copy()
+            if not df_hrt_show.empty:
+                df_hrt_show["Tipo"] = df_hrt_show["categoria"].apply(
+                    lambda x: "⚠️ Desbordado DA" if x in ["Riesgo Confirmado","Punto Ciego"]
+                    else f"{ALERT_EMOJI.get(x,'')} Teórico"
+                )
+                df_hrt_show["P(crítico)"] = df_hrt_show["proba_critical"].apply(lambda x: f"{x:.0%}")
+                df_hrt_show["LSC"]        = df_hrt_show["marcador_LSC"].map({1:"✓", 0:""})
+                st.dataframe(
+                    df_hrt_show[["student_id","Tipo","P(crítico)","LSC"]].rename(
+                        columns={"student_id":"ID"}
+                    ),
+                    use_container_width=True, hide_index=True,
+                    height=min(150 + cap_hrt * 35, 320)
+                )
+            else:
+                st.caption("Sin intervenciones asignadas")
