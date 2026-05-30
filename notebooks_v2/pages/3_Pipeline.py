@@ -18,7 +18,7 @@ with tab1:
     st.caption("Patrón Medallion (Bronze → Trusted → Silver) · Databricks Free Edition · PySpark 4.1.0")
 
     st.markdown("### Flujo del pipeline")
-    cols = st.columns(5)
+    cols = st.columns([2, 0.4, 2, 0.4, 2, 0.4, 2, 0.4, 2])
 
     items = [
         ("🏫", "Phidias",   "Exportación<br>XLS manual",                "#bdc3c7", "#555"),
@@ -29,15 +29,19 @@ with tab1:
     ]
 
     for i, (emoji, titulo, detalle, color_borde, color_texto) in enumerate(items):
-        flecha = "<div style='text-align:left;font-size:1.2em;color:#aaa;margin-bottom:4px'>→</div>" if i > 0 else ""
-        cols[i].markdown(f"""
-        {flecha}
+        col_idx = i * 2
+        cols[col_idx].markdown(f"""
         <div style="border:2px solid {color_borde};border-radius:10px;
-                    padding:12px 6px;text-align:center;min-height:140px">
-            <div style="font-size:1.4em">{emoji}</div>
-            <div style="font-weight:700;color:{color_texto};margin-top:4px;font-size:0.88em">{titulo}</div>
-            <div style="font-size:0.68em;color:#666;margin-top:4px;line-height:1.5">{detalle}</div>
+                    padding:10px 4px;text-align:center;min-height:140px">
+            <div style="font-size:1.3em">{emoji}</div>
+            <div style="font-weight:700;color:{color_texto};margin-top:4px;font-size:0.82em">{titulo}</div>
+            <div style="font-size:0.65em;color:#666;margin-top:4px;line-height:1.5">{detalle}</div>
         </div>""", unsafe_allow_html=True)
+        if i < 4:
+            cols[col_idx + 1].markdown(
+                "<div style='text-align:center;font-size:1.3em;color:#aaa;padding-top:50px'>→</div>",
+                unsafe_allow_html=True
+            )
 
     st.divider()
     st.markdown("### Stack tecnológico")
