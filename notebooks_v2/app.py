@@ -7,6 +7,16 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 
+# ── Navegación multipágina ─────────────────────────────────────
+pg = st.navigation([
+    st.Page("app.py",                    title="🏫 Inicio",         default=True),
+    st.Page("pages/1_Visualizacion.py",  title="📊 Visualización"),
+    st.Page("pages/2_Modelo.py",         title="🤖 Modelo"),
+    st.Page("pages/3_Pipeline.py",       title="⚙️ Pipeline"),
+    st.Page("pages/4_Decisiones.py",     title="🎯 Decisiones"),
+])
+pg.run()
+
 st.set_page_config(
     page_title="Vermont Early Warning System",
     page_icon="🏫",
