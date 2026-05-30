@@ -401,52 +401,56 @@ with tab2:
     st.markdown("**🔵 Directores de grupo (HRT)**")
     st.caption("Cada HRT atiende primero los desbordados del DA de su sección, luego sus teóricos")
 
-    cols_hrt = st.columns(min(len(secciones), 3))
+    # Dividir secciones en filas de 3
+    secciones_lista = list(secciones)
+    filas = [secciones_lista[i:i+3] for i in range(0, len(secciones_lista), 3)]
 
-    for i, sec in enumerate(secciones):
-        col = cols_hrt[i % 3]
-        with col:
-            # Pool del HRT: desbordados de su sección + teóricos de su sección
-            desb_sec = df_desbordados[df_desbordados["seccion"] == sec] \
-                       if not df_desbordados.empty else pd.DataFrame()
-            teor_sec = df_g[
-                (df_g["categoria"] == "Riesgo Teórico") &
-                (df_g["seccion"] == sec)
-            ].sort_values("proba_critical", ascending=False)
+    for fila in filas:
+        cols_hrt = st.columns(3)
+        for j, sec in enumerate(fila):
+            with cols_hrt[j]:
+                desb_sec = df_desbordados[df_desbordados["seccion"] == sec] \
+                           if not df_desbordados.empty else pd.DataFrame()
+                teor_sec = df_g[
+                    (df_g["categoria"] == "Riesgo Teórico") &
+                    (df_g["seccion"] == sec)
+                ].sort_values("proba_critical", ascending=False)
 
-            n_desb = len(desb_sec)
-            n_teor = len(teor_sec)
-            n_conf_sec = int((df_g[df_g["seccion"]==sec]["categoria"] == "Riesgo Confirmado").sum())
-            pool_hrt = pd.concat([desb_sec, teor_sec], ignore_index=True)
+                n_desb    = len(desb_sec)
+                n_teor    = len(teor_sec)
+                n_conf_sec = int((df_g[df_g["seccion"]==sec]["categoria"] == "Riesgo Confirmado").sum())
+                pool_hrt  = pd.concat([desb_sec, teor_sec], ignore_index=True)
 
-            grado_sec = df_g[df_g["seccion"]==sec]["grado_str"].iloc[0] \
-                        if len(df_g[df_g["seccion"]==sec]) > 0 else "?"
+                grado_sec = df_g[df_g["seccion"]==sec]["grado_str"].iloc[0] \
+                            if len(df_g[df_g["seccion"]==sec]) > 0 else "?"
 
-            st.markdown(f"**{grado_sec}-{sec}** · {n_conf_sec} confirmados · {n_teor} teóricos"
-                        + (f" · ⚠️ {n_desb} desbordados" if n_desb > 0 else ""))
-
-            cap_hrt = st.slider(
-                f"Capacidad {grado_sec}-{sec}",
-                min_value=0, max_value=max(len(pool_hrt), 1),
-                value=min(n_teor, 3),
-                key=f"slider_hrt_{sec}",
-                label_visibility="collapsed"
-            )
-
-            df_hrt_show = pool_hrt.head(cap_hrt).copy()
-            if not df_hrt_show.empty:
-                df_hrt_show["Tipo"] = df_hrt_show["categoria"].apply(
-                    lambda x: "⚠️ Desbordado DA" if x in ["Riesgo Confirmado","Punto Ciego"]
-                    else f"{ALERT_EMOJI.get(x,'')} Teórico"
+                st.markdown(
+                    f"**{grado_sec}-{sec}** · {n_conf_sec} confirmados · {n_teor} teóricos"
+                    + (f" · ⚠️ {n_desb} desbordados" if n_desb > 0 else "")
                 )
-                df_hrt_show["P(crítico)"] = df_hrt_show["proba_critical"].apply(lambda x: f"{x:.0%}")
-                df_hrt_show["LSC"]        = df_hrt_show["marcador_LSC"].map({1:"✓", 0:""})
-                st.dataframe(
-                    df_hrt_show[["student_id","Tipo","P(crítico)","LSC"]].rename(
-                        columns={"student_id":"ID"}
-                    ),
-                    use_container_width=True, hide_index=True,
-                    height=min(150 + cap_hrt * 35, 320)
+
+                cap_hrt = st.slider(
+                    f"Capacidad {grado_sec}-{sec}",
+                    min_value=0, max_value=max(len(pool_hrt), 1),
+                    value=min(n_teor, 3),
+                    key=f"slider_hrt_{sec}",
+                    label_visibility="collapsed"
                 )
-            else:
-                st.caption("Sin intervenciones asignadas")
+
+                df_hrt_show = pool_hrt.head(cap_hrt).copy()
+                if not df_hrt_show.empty:
+                    df_hrt_show["Tipo"] = df_hrt_show["categoria"].apply(
+                        lambda x: "⚠️ Desbordado DA" if x in ["Riesgo Confirmado","Punto Ciego"]
+                        else f"{ALERT_EMOJI.get(x,'')} Teórico"
+                    )
+                    df_hrt_show["P(crítico)"] = df_hrt_show["proba_critical"].apply(lambda x: f"{x:.0%}")
+                    df_hrt_show["LSC"]        = df_hrt_show["marcador_LSC"].map({1:"✓", 0:""})
+                    st.dataframe(
+                        df_hrt_show[["student_id","Tipo","P(crítico)","LSC"]].rename(
+                            columns={"student_id":"ID"}
+                        ),
+                        use_container_width=True, hide_index=True,
+                        height=min(150 + cap_hrt * 35, 320)
+                    )
+                else:
+                    st.caption("Sin intervenciones asignadas")
