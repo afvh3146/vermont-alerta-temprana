@@ -5,13 +5,12 @@ Tabs: Semáforo general | Detalle por estudiante | Por asignatura
 
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
 import plotly.express as px
+import plotly.graph_objects as go
 import numpy as np
 
 st.set_page_config(page_title="Visualización · Vermont EWS", page_icon="📊", layout="wide")
 
-# ── Constantes ────────────────────────────────────────────────────────────────
 DATA_URL = (
     "https://raw.githubusercontent.com/afvh3146/"
     "vermont-alerta-temprana/main/notebooks_v2/dashboard_data.csv"
@@ -22,24 +21,26 @@ SUBJECTS = [
     "ICT_STEM", "Physical_Education", "Research_Methodology"
 ]
 SUBJECT_LABELS = {
-    "Science": "Science", "I_and_S": "I&S",
-    "Mathematics": "Mathematics", "English": "English",
-    "Lengua_Castellana": "Lengua Cast.", "Mandarin": "Mandarin",
-    "Financial_Maths": "Fin. Maths", "ICT_STEM": "ICT/STEM",
-    "Physical_Education": "Phys. Ed.", "Research_Methodology": "Research"
+    "Science": "Science", "I_and_S": "I&S", "Mathematics": "Mathematics",
+    "English": "English", "Lengua_Castellana": "Lengua Cast.",
+    "Mandarin": "Mandarin", "Financial_Maths": "Fin. Maths",
+    "ICT_STEM": "ICT/STEM", "Physical_Education": "Phys. Ed.",
+    "Research_Methodology": "Research"
 }
 ALERT_ORDER  = ["Riesgo Confirmado", "Punto Ciego", "Riesgo Teórico", "Sin Riesgo"]
 ALERT_COLORS = {
-    "Riesgo Confirmado": "#e74c3c",
-    "Punto Ciego":       "#e67e22",
-    "Riesgo Teórico":    "#3498db",
-    "Sin Riesgo":        "#2ecc71",
+    "Riesgo Confirmado": "#e74c3c", "Punto Ciego": "#e67e22",
+    "Riesgo Teórico": "#3498db",   "Sin Riesgo":  "#2ecc71",
 }
-ALERT_EMOJI = {
-    "Riesgo Confirmado": "🔴",
-    "Punto Ciego":       "🟠",
-    "Riesgo Teórico":    "🔵",
-    "Sin Riesgo":        "🟢",
+ALERT_EMOJI  = {
+    "Riesgo Confirmado": "🔴", "Punto Ciego": "🟠",
+    "Riesgo Teórico":    "🔵", "Sin Riesgo":  "🟢",
+}
+ALERT_DESC = {
+    "Riesgo Confirmado": "Modelo y T3 parcial coinciden. Intervención urgente.",
+    "Punto Ciego":       "T3 muestra riesgo pero el modelo no lo detectó. Revisar con urgencia.",
+    "Riesgo Teórico":    "Modelo detecta riesgo pero T3 aún no lo confirma. Monitoreo activo.",
+    "Sin Riesgo":        "Sin señales de riesgo. Seguimiento rutinario.",
 }
 ALERT_ACCION = {
     "Riesgo Confirmado": "Intervención urgente",
@@ -48,372 +49,554 @@ ALERT_ACCION = {
     "Sin Riesgo":        "Seguimiento rutinario",
 }
 GRADO_MAP   = {"X": 7, "Y": 8, "Z": 9}
-GRADO_LABEL = {7: "7°", 8: "8°", 9: "9°"}
+GRADO_LABEL = {7: "X", 8: "Y", 9: "Z"}
 
-# ── Carga de datos ─────────────────────────────────────────────────────────────
 @st.cache_data(ttl=3600)
 def load_data():
     df = pd.read_csv(DATA_URL)
-    df["seccion"] = df["section_anon"].str[-1]
-    df["grado_str"] = df["grade"].map(GRADO_LABEL)
-    df["categoria"] = df["categoria"].fillna("Riesgo Teórico")
+    df["seccion"]     = df["section_anon"].str[-1]
+    df["grado_label"] = df["grade"].map(GRADO_LABEL) + " " + df["seccion"]
+    df["categoria"]   = df["categoria"].fillna("Riesgo Teórico")
     return df
 
 df = load_data()
 
-# ── Sidebar ────────────────────────────────────────────────────────────────────
+# ── Sidebar ────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown("## 📊 Visualización")
+    st.markdown("Año lectivo 2025–26 · T1 + T2 + T3 parcial")
     st.divider()
+    st.markdown("### LSC")
+    solo_lsc = st.checkbox("Mostrar solo estudiantes LSC")
+    st.divider()
+    st.markdown("### Categorías")
+    cats_activas = []
+    for cat in ALERT_ORDER:
+        if st.checkbox(f"{ALERT_EMOJI[cat]} {cat}", value=True, key=f"cb_{cat}"):
+            cats_activas.append(cat)
+    st.divider()
+    metrics_placeholder = st.empty()
 
-    st.markdown("**Filtrar por grado**")
-    grado_sel = st.radio("Grado", ["Todos", "X", "Y", "Z"], horizontal=True,
-                         label_visibility="collapsed")
+# ── Título + filtros de grado/sección ─────────────────────────
+st.markdown("# 📊 Vermont Early Warning System")
 
+col_grado, col_seccion = st.columns([2, 1])
+with col_grado:
+    grado_sel = st.radio("Grado", ["Todos", "X", "Y", "Z"],
+                         horizontal=True, label_visibility="collapsed")
+with col_seccion:
     if grado_sel == "Todos":
-        df_g = df.copy()
-        st.markdown("**Filtrar por sección**")
         seccion_sel = st.selectbox("Sección", ["Todas", "A", "B"],
                                    label_visibility="collapsed")
     else:
         grado_num = GRADO_MAP[grado_sel]
-        df_g = df[df["grade"] == grado_num].copy()
         secciones_disp = ["Todas"] + sorted(
             df[df["grade"] == grado_num]["seccion"].unique().tolist()
         )
-        st.markdown("**Filtrar por sección**")
         seccion_sel = st.selectbox("Sección", secciones_disp,
                                    label_visibility="collapsed")
 
-    if seccion_sel != "Todas":
-        df_g = df_g[df_g["seccion"] == seccion_sel]
+# ── Filtros globales ───────────────────────────────────────────
+if grado_sel == "Todos":
+    df_g = df.copy()
+else:
+    df_g = df[df["grade"] == GRADO_MAP[grado_sel]].copy()
 
-    st.divider()
-    st.markdown("**Filtrar categorías**")
-    cats_sel = st.multiselect(
-        "Categorías visibles", ALERT_ORDER, default=ALERT_ORDER,
-        label_visibility="collapsed"
-    )
-    df_g = df_g[df_g["categoria"].isin(cats_sel)]
+if seccion_sel != "Todas":
+    df_g = df_g[df_g["seccion"] == seccion_sel]
 
-    st.divider()
-    lsc_sel = st.checkbox("Solo estudiantes LSC", value=False)
-    if lsc_sel and "marcador_LSC" in df_g.columns:
-        df_g = df_g[df_g["marcador_LSC"] == 1]
+if solo_lsc:
+    df_g = df_g[df_g["marcador_LSC"] == 1]
 
-    st.divider()
-    n_total = len(df_g)
-    n_riesgo = df_g["categoria"].isin(["Riesgo Confirmado", "Punto Ciego"]).sum()
-    st.metric("Estudiantes visibles", n_total)
-    st.metric("Con riesgo activo", n_riesgo)
+df_filtrado = df_g[df_g["categoria"].isin(cats_activas)] if cats_activas else df_g.copy()
 
-# ── Header ─────────────────────────────────────────────────────────────────────
-label_grado = f"Grado {grado_sel}" if grado_sel != "Todos" else "Todos los grados"
-label_sec   = f" · Sección {seccion_sel}" if seccion_sel != "Todas" else ""
-st.markdown(f"# 📊 Visualización · {label_grado}{label_sec}")
-fecha = df["fecha_corte"].iloc[0] if "fecha_corte" in df.columns else "Mayo 2026"
-st.caption(f"Corte: {fecha} · {n_total} estudiantes · {n_riesgo} con riesgo activo")
-st.divider()
+n_total    = len(df_filtrado)
+n_criticos = (df_filtrado["categoria"] == "Riesgo Confirmado").sum()
+n_ciegos   = (df_filtrado["categoria"] == "Punto Ciego").sum()
 
-# ── Tabs ───────────────────────────────────────────────────────────────────────
-tab1, tab2, tab3 = st.tabs(["🚦 Semáforo general", "👤 Detalle por estudiante", "📚 Por asignatura"])
+with metrics_placeholder:
+    st.metric("Estudiantes", n_total)
+    st.metric("🔴 Riesgo confirmado", n_criticos)
+    st.metric("🟠 Punto ciego", n_ciegos)
 
-# ═══════════════════════════════════════════════════════════════
+grupo_texto = grado_sel if grado_sel != "Todos" else "Middle School"
+if seccion_sel != "Todas":
+    grupo_texto += f" · Sección {seccion_sel}"
+if solo_lsc:
+    grupo_texto += " · Solo LSC"
+st.markdown(f"**{grupo_texto}** · {n_total} estudiantes · Año lectivo 2025–26")
+
+# ── Helpers ────────────────────────────────────────────────────
+cat_highlight = "Ninguna"
+
+def get_color(cat):
+    if cat_highlight == "Ninguna":
+        return ALERT_COLORS[cat]
+    return ALERT_COLORS[cat] if cat == cat_highlight else "#cccccc"
+
+def get_opacity(cat):
+    if cat_highlight == "Ninguna":
+        return 0.85
+    return 0.92 if cat == cat_highlight else 0.2
+
+def build_hover(row):
+    lines = [
+        f"<b>ID: {row['student_id']}</b>",
+        f"Grado: {row['grado_label']}",
+        f"Categoría: {ALERT_EMOJI.get(row['categoria'],'')} {row['categoria']}",
+        f"Prob. riesgo (crítico): {row['proba_critical']*100:.0f}%",
+        f"LSC: {'✓ Sí' if row.get('marcador_LSC', 0) == 1 else 'No'}",
+        "──────────────",
+        "<b>Materias con nota acumulada bajo 4.0:</b>"
+    ]
+    tiene_bajas = False
+    for s in SUBJECTS:
+        t1 = row.get(f"{s}_T1", np.nan)
+        t2 = row.get(f"{s}_T2", np.nan)
+        t3 = row.get(f"{s}_T3", np.nan)
+        if not any(pd.isna([t1, t2, t3])):
+            acum = t1*0.30 + t2*0.30 + t3*0.40
+            if acum < 4.0:
+                lines.append(f"  ⚠️ {SUBJECT_LABELS[s]}: acum {acum:.2f}")
+                tiene_bajas = True
+    if not tiene_bajas:
+        lines.append("  ✓ Ninguna")
+    return "<br>".join(lines)
+
+# ── Tabs ───────────────────────────────────────────────────────
+tab1, tab2, tab3 = st.tabs([
+    "📊 Semáforo general",
+    "🔍 Detalle por estudiante",
+    "📚 Por asignatura",
+])
+
+# ══════════════════════════════════════════════
 # TAB 1 — SEMÁFORO GENERAL
-# ═══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════
 with tab1:
-    st.markdown("### Mapa de riesgo por cuadrante")
-    st.caption("Eje X: promedio T2 · Eje Y: promedio T1 · Color: categoría de alerta · Tamaño: índice disciplinario")
+    cols_m = st.columns(4)
+    for i, cat in enumerate(ALERT_ORDER):
+        n     = (df_filtrado["categoria"] == cat).sum()
+        pct   = round(n / n_total * 100, 1) if n_total > 0 else 0
+        color = get_color(cat)
+        cols_m[i].markdown(f"""
+        <div style="margin-bottom:8px">
+            <span style="font-size:1.8em;font-weight:700;color:{color}">{n}</span>
+            <span style="font-size:1em;color:{color};margin-left:6px">
+                {ALERT_EMOJI[cat]} {cat}
+            </span>
+            <span style="font-size:0.9em;color:#999;margin-left:6px">{pct}%</span><br>
+            <span style="font-size:0.78em;color:#666;line-height:1.3">{ALERT_DESC[cat]}</span>
+        </div>""", unsafe_allow_html=True)
 
-    if df_g.empty:
-        st.info("No hay estudiantes con los filtros seleccionados.")
-    else:
-        # Scatter cuadrantes
-        fig_scatter = go.Figure()
-        for cat in ALERT_ORDER:
-            sub = df_g[df_g["categoria"] == cat]
-            if sub.empty:
-                continue
-            sizes = 10 + sub["indice_disciplinario"].fillna(0).clip(0, 20) * 2 \
-                if "indice_disciplinario" in sub.columns else 14
+    st.divider()
 
-            hover_text = (
-                sub["student_id"].astype(str) + "<br>" +
-                "Grado: " + sub["grado_str"].fillna("") + " · Sec: " + sub["seccion"].fillna("") + "<br>" +
-                "Avg T1: " + sub["avg_T1"].round(2).astype(str) + "<br>" +
-                "Avg T2: " + sub["avg_T2"].round(2).astype(str) + "<br>" +
-                "Categoría: " + cat
-            )
-
-            fig_scatter.add_trace(go.Scatter(
-                x=sub["avg_T2"], y=sub["avg_T1"],
-                mode="markers",
-                name=f"{ALERT_EMOJI[cat]} {cat}",
-                marker=dict(color=ALERT_COLORS[cat], size=sizes, opacity=0.8,
-                            line=dict(width=1, color="white")),
-                text=hover_text, hovertemplate="%{text}<extra></extra>"
-            ))
-
-        # Líneas de umbral (nota mínima = 4.0)
-        fig_scatter.add_hline(y=4.0, line_dash="dash", line_color="#aaa",
-                              annotation_text="Mínimo T1", annotation_position="left")
-        fig_scatter.add_vline(x=4.0, line_dash="dash", line_color="#aaa",
-                              annotation_text="Mínimo T2", annotation_position="top")
-
-        fig_scatter.update_layout(
-            height=420, plot_bgcolor="white", paper_bgcolor="white",
-            xaxis=dict(title="Promedio T2", range=[1, 7.2], gridcolor="#f0f0f0"),
-            yaxis=dict(title="Promedio T1", range=[1, 7.2], gridcolor="#f0f0f0"),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02),
-            margin=dict(l=50, r=20, t=50, b=50)
+    col_titulo, col_contraste = st.columns([3, 1])
+    with col_titulo:
+        st.markdown("#### Probabilidad de riesgo vs. Materias en bajo rendimiento")
+    with col_contraste:
+        cat_highlight = st.selectbox(
+            "Destacar", ["Ninguna"] + ALERT_ORDER,
+            label_visibility="collapsed",
+            help="Resalta una categoría; el resto queda en gris"
         )
-        st.plotly_chart(fig_scatter, use_container_width=True)
 
-        # Barras de conteo por categoría
-        st.markdown("### Conteo por categoría de alerta")
-        cat_counts = df_g["categoria"].value_counts().reindex(ALERT_ORDER, fill_value=0)
-        fig_bar = go.Figure()
-        for cat in ALERT_ORDER:
-            fig_bar.add_trace(go.Bar(
-                x=[cat], y=[cat_counts[cat]],
-                name=cat,
-                marker_color=ALERT_COLORS[cat],
-                text=[cat_counts[cat]], textposition="outside",
-                showlegend=False
-            ))
+    df_sc = df_filtrado.copy()
+    df_sc["hover_text"] = df_sc.apply(build_hover, axis=1)
+
+    fig_sc = go.Figure()
+    for cat in ALERT_ORDER:
+        sub = df_sc[df_sc["categoria"] == cat]
+        if sub.empty:
+            continue
+        color   = get_color(cat)
+        opacity = get_opacity(cat)
+        size    = 13 if (cat_highlight == "Ninguna" or cat == cat_highlight) else 9
+        symbols  = sub["marcador_LSC"].map({1: "diamond", 0: "circle"})
+        border_w = sub["marcador_LSC"].map({1: 2.5, 0: 0.8})
+        border_c = sub["marcador_LSC"].map({1: "#000000", 0: "white"})
+        sizes    = sub["marcador_LSC"].map({1: size + 3, 0: size})
+        fig_sc.add_trace(go.Scatter(
+            x=sub["proba_critical"],
+            y=sub["n_bajo_acumulada"],
+            mode="markers",
+            name=f"{ALERT_EMOJI[cat]} {cat}",
+            marker=dict(
+                color=color, size=sizes, symbol=symbols,
+                line=dict(width=border_w, color=border_c),
+                opacity=opacity
+            ),
+            hovertext=sub["hover_text"],
+            hoverinfo="text",
+            showlegend=True
+        ))
+
+    fig_sc.add_vline(x=0.30, line_dash="dash", line_color="#e74c3c", line_width=1.5,
+                     annotation_text="Umbral de riesgo (0.30)",
+                     annotation_position="top right",
+                     annotation_font_color="#e74c3c", annotation_font_size=11)
+    fig_sc.add_hline(y=2.5, line_dash="dash", line_color="#888", line_width=1.5,
+                     annotation_text="3 materias = pierde el año",
+                     annotation_position="right", annotation_font_size=11)
+    fig_sc.add_annotation(x=0.15, y=9.3, text="🟠 Punto ciego",
+        showarrow=False, font=dict(color="#e67e22", size=11), opacity=0.8)
+    fig_sc.add_annotation(x=0.75, y=9.3, text="🔴 Riesgo confirmado",
+        showarrow=False, font=dict(color="#e74c3c", size=11), opacity=0.8)
+    fig_sc.add_annotation(x=0.15, y=0.3, text="🟢 Sin riesgo",
+        showarrow=False, font=dict(color="#27ae60", size=11), opacity=0.8)
+    fig_sc.add_annotation(x=0.75, y=0.3, text="🔵 Riesgo teórico",
+        showarrow=False, font=dict(color="#3498db", size=11), opacity=0.8)
+    fig_sc.update_layout(
+        height=520,
+        xaxis_title="Probabilidad de riesgo (modelo)",
+        yaxis_title="N° materias en bajo rendimiento",
+        xaxis=dict(range=[-0.02, 1.02], gridcolor="#f0f0f0",
+                   tickformat=".0%",
+                   tickvals=[0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]),
+        yaxis=dict(range=[-0.5, 10.5], gridcolor="#f0f0f0", dtick=1),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, font=dict(size=12)),
+        margin=dict(l=50, r=20, t=60, b=50),
+        plot_bgcolor="white", paper_bgcolor="white",
+        hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="#ddd")
+    )
+    st.plotly_chart(fig_sc, use_container_width=True)
+    st.caption("◆ = estudiante con LSC (borde negro) · ● = sin LSC")
+
+    col_bar, col_sec = st.columns(2)
+    with col_bar:
+        st.markdown("#### Distribución por categoría")
+        cat_counts = (
+            df_filtrado["categoria"].value_counts()
+            .reindex(ALERT_ORDER).dropna().reset_index()
+        )
+        cat_counts.columns = ["categoria", "n"]
+        fig_bar = go.Figure(go.Bar(
+            x=cat_counts["n"],
+            y=[f"{ALERT_EMOJI[c]} {c}" for c in cat_counts["categoria"]],
+            orientation="h",
+            marker_color=[get_color(c) for c in cat_counts["categoria"]],
+            text=cat_counts["n"], textposition="outside"
+        ))
         fig_bar.update_layout(
-            height=300, plot_bgcolor="white", paper_bgcolor="white",
-            xaxis=dict(title=""), yaxis=dict(title="Estudiantes", gridcolor="#f0f0f0"),
-            margin=dict(l=40, r=20, t=30, b=40)
+            height=240, xaxis_title="N° estudiantes",
+            margin=dict(l=10, r=40, t=10, b=30),
+            plot_bgcolor="white", paper_bgcolor="white",
+            xaxis=dict(gridcolor="#f0f0f0")
         )
         st.plotly_chart(fig_bar, use_container_width=True)
 
-        # Tabla resumen por categoría
-        st.markdown("### Resumen por categoría")
-        resumen = []
-        for cat in ALERT_ORDER:
-            sub = df_g[df_g["categoria"] == cat]
-            if sub.empty:
-                continue
-            resumen.append({
-                "Categoría": f"{ALERT_EMOJI[cat]} {cat}",
-                "N": len(sub),
-                "% del grupo": f"{round(len(sub)/len(df_g)*100,1)}%",
-                "Avg T2 promedio": round(sub["avg_T2"].mean(), 2) if "avg_T2" in sub else "—",
-                "Acción sugerida": ALERT_ACCION[cat]
-            })
-        if resumen:
-            st.dataframe(pd.DataFrame(resumen), use_container_width=True, hide_index=True)
+    with col_sec:
+        if seccion_sel == "Todas" and grado_sel != "Todos":
+            st.markdown("#### Por sección")
+            sec_cat = df_filtrado.groupby(["seccion","categoria"]).size().reset_index(name="n")
+            fig_sec = px.bar(sec_cat, x="seccion", y="n", color="categoria",
+                             color_discrete_map={c: get_color(c) for c in ALERT_ORDER},
+                             labels={"seccion":"Sección","n":"Estudiantes","categoria":"Categoría"},
+                             height=240)
+            fig_sec.update_layout(showlegend=False,
+                                  margin=dict(l=10,r=10,t=10,b=40),
+                                  plot_bgcolor="white", paper_bgcolor="white")
+            st.plotly_chart(fig_sec, use_container_width=True)
+        elif grado_sel == "Todos":
+            st.markdown("#### Por grado")
+            grade_cat = df_filtrado.groupby(["grade","categoria"]).size().reset_index(name="n")
+            grade_cat["grado_str"] = grade_cat["grade"].map(GRADO_LABEL)
+            fig_grade = px.bar(grade_cat, x="grado_str", y="n", color="categoria",
+                               color_discrete_map={c: get_color(c) for c in ALERT_ORDER},
+                               labels={"grado_str":"Grado","n":"Estudiantes","categoria":"Categoría"},
+                               height=240, category_orders={"grado_str":["X","Y","Z"]})
+            fig_grade.update_layout(showlegend=False,
+                                    margin=dict(l=10,r=10,t=10,b=40),
+                                    plot_bgcolor="white", paper_bgcolor="white")
+            st.plotly_chart(fig_grade, use_container_width=True)
 
-# ═══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════
 # TAB 2 — DETALLE POR ESTUDIANTE
-# ═══════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════
 with tab2:
-    st.markdown("### Seleccionar estudiante")
+    st.markdown("#### Lista de estudiantes — urgentes primero · Haz clic en una fila para ver el perfil")
 
-    if df_g.empty:
-        st.info("No hay estudiantes con los filtros seleccionados.")
-    else:
-        # Selector: ordenado por riesgo descendente
-        cat_order_map = {c: i for i, c in enumerate(ALERT_ORDER)}
-        df_sorted = df_g.copy()
-        df_sorted["_ord"] = df_sorted["categoria"].map(cat_order_map)
-        df_sorted = df_sorted.sort_values("_ord")
+    df_tabla = df_filtrado.copy()
+    df_tabla["cat_order"] = df_tabla["categoria"].map(
+        {cat: i for i, cat in enumerate(ALERT_ORDER)}
+    )
+    df_tabla = df_tabla.sort_values("cat_order").reset_index(drop=True)
 
-        opciones = {
-            row["student_id"]: (
-                f"{ALERT_EMOJI.get(row['categoria'], '⚪')} {row['student_id']} · "
-                f"Grado {row.get('grado_str','?')} Sec {row.get('seccion','?')} · "
-                f"{row['categoria']}"
-            )
-            for _, row in df_sorted.iterrows()
-        }
-        sel_id = st.selectbox("Estudiante", list(opciones.keys()),
-                              format_func=lambda x: opciones[x])
+    cols_show = ["student_id","grade","seccion","categoria","pred_label",
+                 "avg_T1","avg_T2","n_bajo_acumulada","marcador_LSC",
+                 "perfil","n_f1","n_f2","total_absences"]
+    cols_show = [c for c in cols_show if c in df_tabla.columns]
+    df_show   = df_tabla[cols_show].copy()
+    df_show["avg_T1"]       = df_show["avg_T1"].round(2)
+    df_show["avg_T2"]       = df_show["avg_T2"].round(2)
+    df_show["grade"]        = df_show["grade"].map(GRADO_LABEL)
+    df_show["marcador_LSC"] = df_show["marcador_LSC"].map({1: "✓", 0: ""})
+    df_show["categoria"]    = df_show["categoria"].apply(
+        lambda x: f"{ALERT_EMOJI.get(x,'')} {x}"
+    )
+    df_show = df_show.rename(columns={
+        "student_id":"ID","grade":"Grado","seccion":"Secc.",
+        "categoria":"Categoría","pred_label":"Pred. modelo",
+        "avg_T1":"Prom. T1","avg_T2":"Prom. T2",
+        "n_bajo_acumulada":"Mat. < 4.0","marcador_LSC":"LSC",
+        "perfil":"Perfil","n_f1":"F1","n_f2":"F2","total_absences":"Ausencias"
+    })
 
-        row = df_g[df_g["student_id"] == sel_id].iloc[0]
-        cat = row["categoria"]
-        color = ALERT_COLORS.get(cat, "#aaa")
+    selection = st.dataframe(df_show, use_container_width=True, height=380,
+                              on_select="rerun", selection_mode="single-row")
 
+    selected_rows = selection.selection.rows
+    if selected_rows:
+        idx = selected_rows[0]
+        row = df_tabla.iloc[idx]
         st.divider()
-
-        # Ficha de resumen
-        c1, c2, c3, c4 = st.columns(4)
-        c1.markdown(f"""
-        <div style="background:{color}15;border-left:5px solid {color};
-                    padding:12px;border-radius:8px;text-align:center">
-            <div style="font-size:1.8em">{ALERT_EMOJI.get(cat,'⚪')}</div>
-            <div style="font-size:0.85em;color:{color};font-weight:700">{cat}</div>
+        cat   = row["categoria"]
+        color = ALERT_COLORS.get(cat, "#888")
+        st.markdown(f"""
+        <div style="background:{color}22;border-left:5px solid {color};
+                    padding:12px 16px;border-radius:8px;margin-bottom:16px">
+            <b style="color:{color}">{ALERT_EMOJI.get(cat,'')} {cat}</b>
+            <span style="font-size:0.85em;color:#444;margin-left:12px">
+                {ALERT_ACCION.get(cat,'')}
+            </span>
         </div>""", unsafe_allow_html=True)
 
-        c2.metric("Promedio T1", f"{row.get('avg_T1', '—'):.2f}" if pd.notna(row.get("avg_T1")) else "—")
-        c3.metric("Promedio T2", f"{row.get('avg_T2', '—'):.2f}" if pd.notna(row.get("avg_T2")) else "—",
-                  delta=f"{row.get('tendencia_general', 0):.2f}" if pd.notna(row.get("tendencia_general")) else None)
-        c4.metric("Asistencia", f"{row.get('pct_asistencia', '—'):.1f}%" if pd.notna(row.get("pct_asistencia")) else "—")
+        col_radar, col_mat = st.columns([1, 1])
+        with col_radar:
+            grade = int(row.get("grade", 9))
+            materias_ingles = (
+                {"Science","Mathematics","Financial_Maths","ICT_STEM","English","Research_Methodology"}
+                if grade == 9
+                else {"Science","Mathematics","Financial_Maths","ICT_STEM","I_and_S","English"}
+            )
+            subjects_orden = (
+                ["Science","Mathematics","Financial_Maths","ICT_STEM",
+                 "I_and_S","Research_Methodology","English","Mandarin",
+                 "Lengua_Castellana","Physical_Education"]
+                if grade == 9
+                else ["Science","Mathematics","Financial_Maths","ICT_STEM",
+                      "I_and_S","English","Mandarin","Lengua_Castellana","Physical_Education"]
+            )
+            subs_disp = [s for s in subjects_orden if not pd.isna(row.get(f"{s}_T1", np.nan))]
 
-        st.markdown("&nbsp;")
-        col_a, col_b = st.columns([1, 1])
+            if subs_disp:
+                highlight_ingles = st.checkbox("Resaltar materias en inglés", value=False,
+                                               key=f"ing_{idx}")
+                labels = [SUBJECT_LABELS[s] for s in subs_disp]
+                t3a_v  = [row.get(f"{s}_T3", 0) or 0 for s in subs_disp]
+                t3p_v  = [row.get(f"{s}_T3_pred", 0) or 0 for s in subs_disp]
 
-        with col_a:
-            st.markdown("**Indicadores complementarios**")
-            indicadores = []
-            if pd.notna(row.get("n_f1")): indicadores.append({"Indicador": "Seguimientos F1", "Valor": int(row["n_f1"])})
-            if pd.notna(row.get("n_f2")): indicadores.append({"Indicador": "Seguimientos F2", "Valor": int(row["n_f2"])})
-            if pd.notna(row.get("indice_disciplinario")): indicadores.append({"Indicador": "Índice disciplinario", "Valor": round(row["indice_disciplinario"], 2)})
-            if pd.notna(row.get("total_absences")): indicadores.append({"Indicador": "Ausencias totales", "Valor": int(row["total_absences"])})
-            if pd.notna(row.get("late")): indicadores.append({"Indicador": "Llegadas tarde", "Valor": int(row["late"])})
-            lsc_val = "Sí" if row.get("marcador_LSC") == 1 else "No"
-            indicadores.append({"Indicador": "Marcador LSC", "Valor": lsc_val})
-            if pd.notna(row.get("perfil")): indicadores.append({"Indicador": "Perfil cluster", "Valor": row["perfil"]})
-            if pd.notna(row.get("pred_label")): indicadores.append({"Indicador": "Predicción modelo", "Valor": row["pred_label"]})
-            if pd.notna(row.get("proba_critical")): indicadores.append({"Indicador": "P(crítico)", "Valor": f"{row['proba_critical']:.2%}"})
-
-            st.dataframe(pd.DataFrame(indicadores), use_container_width=True, hide_index=True)
-
-        with col_b:
-            # Radar de notas por asignatura (T1 vs T2)
-            avail_subjects = [s for s in SUBJECTS if f"{s}_T1" in row.index and f"{s}_T2" in row.index]
-            if avail_subjects:
-                labels = [SUBJECT_LABELS.get(s, s) for s in avail_subjects]
-                vals_T1 = [row.get(f"{s}_T1", 0) or 0 for s in avail_subjects]
-                vals_T2 = [row.get(f"{s}_T2", 0) or 0 for s in avail_subjects]
+                t3a_plot = [v * 0.12 if (highlight_ingles and s not in materias_ingles) else v
+                            for v, s in zip(t3a_v, subs_disp)]
+                t3p_plot = [v * 0.12 if (highlight_ingles and s not in materias_ingles) else v
+                            for v, s in zip(t3p_v, subs_disp)]
 
                 fig_radar = go.Figure()
                 fig_radar.add_trace(go.Scatterpolar(
-                    r=vals_T1 + [vals_T1[0]], theta=labels + [labels[0]],
-                    fill="toself", name="T1",
-                    line_color="#3498db", fillcolor="rgba(52,152,219,0.15)"
-                ))
-                fig_radar.add_trace(go.Scatterpolar(
-                    r=vals_T2 + [vals_T2[0]], theta=labels + [labels[0]],
-                    fill="toself", name="T2",
-                    line_color="#e67e22", fillcolor="rgba(230,126,34,0.15)"
-                ))
-                # Línea de mínimo
-                fig_radar.add_trace(go.Scatterpolar(
-                    r=[4.0] * (len(labels) + 1), theta=labels + [labels[0]],
+                    r=[4.0]*(len(labels)+1), theta=labels+[labels[0]],
                     mode="lines", name="Mínimo (4.0)",
-                    line=dict(color="#e74c3c", dash="dash", width=1.5)
+                    line=dict(color="#c0392b", dash="dash", width=1.5),
+                    showlegend=True, hoverinfo="skip"
+                ))
+                fig_radar.add_trace(go.Scatterpolar(
+                    r=t3a_plot+[t3a_plot[0]], theta=labels+[labels[0]],
+                    fill="toself", fillcolor="rgba(39,174,96,0.15)",
+                    name="T3 actual", line=dict(color="#27ae60", width=2.5),
+                    hovertemplate="<b>%{theta}</b><br>T3 actual: %{r:.2f}<extra></extra>"
+                ))
+                fig_radar.add_trace(go.Scatterpolar(
+                    r=t3p_plot+[t3p_plot[0]], theta=labels+[labels[0]],
+                    fill="toself", fillcolor="rgba(168,213,181,0.15)",
+                    name="T3 predicho", line=dict(color="#a8d5b5", dash="dot", width=2),
+                    hovertemplate="<b>%{theta}</b><br>T3 pred: %{r:.2f}<extra></extra>"
                 ))
                 fig_radar.update_layout(
-                    polar=dict(radialaxis=dict(range=[0, 7], tickvals=[1,2,3,4,5,6,7])),
-                    showlegend=True, height=380,
-                    legend=dict(orientation="h", yanchor="bottom", y=-0.15),
-                    margin=dict(l=40, r=40, t=40, b=60)
+                    polar=dict(
+                        radialaxis=dict(visible=True, range=[0,7],
+                                        tickvals=[1,2,3,4,5,6,7],
+                                        tickfont=dict(size=9,color="#aaa"),
+                                        gridcolor="#ebebeb", linecolor="#ddd"),
+                        angularaxis=dict(tickfont=dict(size=10,color="#333"),
+                                         gridcolor="#ebebeb", linecolor="#ddd",
+                                         direction="clockwise", rotation=90)
+                    ),
+                    showlegend=True,
+                    legend=dict(orientation="h", y=-0.18, font=dict(size=10)),
+                    height=420, margin=dict(l=60,r=60,t=40,b=80),
+                    paper_bgcolor="white"
                 )
                 st.plotly_chart(fig_radar, use_container_width=True)
 
-        # Tabla de notas por asignatura
-        st.markdown("**Notas por asignatura**")
-        notas_rows = []
-        for s in SUBJECTS:
-            t1 = row.get(f"{s}_T1")
-            t2 = row.get(f"{s}_T2")
-            t3 = row.get(f"{s}_T3")
-            min_t3 = row.get(f"{s}_min_T3")
-            if pd.isna(t1) and pd.isna(t2):
-                continue
-            delta = round(t2 - t1, 2) if pd.notna(t1) and pd.notna(t2) else None
-            trend = ("↑" if delta > 0 else "↓" if delta < 0 else "=") if delta is not None else "—"
-            notas_rows.append({
-                "Asignatura": SUBJECT_LABELS.get(s, s),
-                "T1": f"{t1:.2f}" if pd.notna(t1) else "—",
-                "T2": f"{t2:.2f}" if pd.notna(t2) else "—",
-                "Δ T1→T2": f"{delta:+.2f} {trend}" if delta is not None else "—",
-                "T3 real": f"{t3:.2f}" if pd.notna(t3) else "—",
-                "Mín T3": f"{min_t3:.2f}" if pd.notna(min_t3) else "—",
-                "Bajo mínimo": "⚠️" if pd.notna(t2) and t2 < 4.0 else ""
-            })
-        if notas_rows:
-            st.dataframe(pd.DataFrame(notas_rows), use_container_width=True, hide_index=True)
+        with col_mat:
+            st.markdown("**Notas por materia**")
+            rows_mat = []
+            for s in SUBJECTS:
+                t1 = row.get(f"{s}_T1", np.nan)
+                if pd.isna(t1):
+                    continue
+                t2      = row.get(f"{s}_T2", np.nan)
+                t3_pred = row.get(f"{s}_T3_pred", np.nan)
+                t3_p10  = row.get(f"{s}_T3_p10", np.nan)
+                t3_p90  = row.get(f"{s}_T3_p90", np.nan)
+                min_t3  = row.get(f"{s}_min_T3", np.nan)
+                t3_real = row.get(f"{s}_T3", np.nan)
 
-# ═══════════════════════════════════════════════════════════════
-# TAB 3 — POR ASIGNATURA
-# ═══════════════════════════════════════════════════════════════
-with tab3:
-    st.markdown("### Promedios por asignatura")
-    st.caption("Promedio grupal en T1 y T2. La línea roja marca el mínimo de aprobación (4.0).")
+                if not pd.isna(t3_pred) and not pd.isna(t3_p10) and not pd.isna(t3_p90):
+                    amp = (t3_p90 - t3_p10) / 2
+                    t3_pred_str = f"{t3_pred:.2f} ± {amp:.2f}"
+                elif not pd.isna(t3_pred):
+                    t3_pred_str = f"{t3_pred:.2f}"
+                else:
+                    t3_pred_str = "—"
 
-    if df_g.empty:
-        st.info("No hay estudiantes con los filtros seleccionados.")
+                estado = ""
+                if not pd.isna(t3_real) and t3_real < 4.0:
+                    estado = "⚠️"
+                elif not pd.isna(t3_pred) and t3_pred < 4.0:
+                    estado = "🔸"
+
+                rows_mat.append({
+                    "":           estado,
+                    "Materia":    SUBJECT_LABELS[s],
+                    "T1":         round(t1, 2),
+                    "T2":         round(t2, 2) if not pd.isna(t2) else "—",
+                    "T3 actual":  round(t3_real, 2) if not pd.isna(t3_real) else "—",
+                    "T3 pred. ±": t3_pred_str,
+                    "T3 mín.":    round(min_t3, 2) if not pd.isna(min_t3) else "—",
+                })
+            if rows_mat:
+                st.dataframe(pd.DataFrame(rows_mat), use_container_width=True,
+                             hide_index=True, height=360)
+            st.caption("⚠️ T3 actual bajo 4.0 · 🔸 T3 predicho bajo 4.0")
     else:
-        avail = [s for s in SUBJECTS if f"{s}_T1" in df_g.columns and f"{s}_T2" in df_g.columns]
-        labels = [SUBJECT_LABELS.get(s, s) for s in avail]
-        avg_T1 = [df_g[f"{s}_T1"].mean() for s in avail]
-        avg_T2 = [df_g[f"{s}_T2"].mean() for s in avail]
+        st.info("Haz clic en una fila de la tabla para ver el perfil del estudiante.")
 
-        fig_subj = go.Figure()
-        fig_subj.add_trace(go.Bar(
-            name="Promedio T1", x=labels, y=avg_T1,
-            marker_color="#3498db", text=[f"{v:.2f}" for v in avg_T1],
-            textposition="outside"
-        ))
-        fig_subj.add_trace(go.Bar(
-            name="Promedio T2", x=labels, y=avg_T2,
-            marker_color="#e67e22", text=[f"{v:.2f}" for v in avg_T2],
-            textposition="outside"
-        ))
-        fig_subj.add_hline(y=4.0, line_dash="dash", line_color="#e74c3c",
-                           annotation_text="Mínimo 4.0", annotation_position="right")
-        fig_subj.update_layout(
-            barmode="group", height=420,
-            plot_bgcolor="white", paper_bgcolor="white",
-            xaxis=dict(title="", tickangle=-30, gridcolor="#f0f0f0"),
-            yaxis=dict(title="Nota promedio", range=[0, 7.8], gridcolor="#f0f0f0"),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02),
-            margin=dict(l=50, r=50, t=50, b=90)
-        )
-        st.plotly_chart(fig_subj, use_container_width=True)
+# ══════════════════════════════════════════════
+# TAB 3 — POR ASIGNATURA
+# ══════════════════════════════════════════════
+with tab3:
+    st.markdown("#### Promedio del grupo por asignatura")
+    st.caption("Selecciona los trimestres que quieres ver")
 
-        # Mapa de calor: promedio T2 por asignatura × categoría
-        st.markdown("### Promedio T2 por asignatura y categoría de alerta")
-        st.caption("Permite ver en qué asignaturas cada grupo de riesgo tiene mayor dificultad.")
+    col_t1, col_t2, col_t3p, col_t3a = st.columns(4)
+    show_t1  = col_t1.checkbox("T1", value=True)
+    show_t2  = col_t2.checkbox("T2", value=True)
+    show_t3p = col_t3p.checkbox("T3 predicho", value=True)
+    show_t3a = col_t3a.checkbox("T3 actual", value=True)
 
-        heatmap_rows = []
-        for cat in ALERT_ORDER:
-            sub = df_g[df_g["categoria"] == cat]
+    subs_data = []
+    for s in SUBJECTS:
+        label = SUBJECT_LABELS[s]
+        for show, t, col, color, solid in [
+            (show_t1,  "T1",          f"{s}_T1",      "#5dade2", True),
+            (show_t2,  "T2",          f"{s}_T2",      "#1a5276", True),
+            (show_t3p, "T3 predicho", f"{s}_T3_pred", "#27ae60", False),
+            (show_t3a, "T3 actual",   f"{s}_T3",      "#27ae60", True),
+        ]:
+            if col in df_filtrado.columns:
+                vals = df_filtrado[col].dropna()
+                if not vals.empty:
+                    subs_data.append({
+                        "Materia": label, "Trimestre": t,
+                        "Promedio": round(vals.mean(), 2),
+                        "Activo": show, "Color": color, "Sólido": solid,
+                    })
+
+    if subs_data:
+        df_subs = pd.DataFrame(subs_data)
+        show_map = {"T1": show_t1, "T2": show_t2,
+                    "T3 predicho": show_t3p, "T3 actual": show_t3a}
+        fig_subs = go.Figure()
+        for t, color, solid in [("T1","#5dade2",True),("T2","#1a5276",True),
+                                  ("T3 predicho","#27ae60",False),("T3 actual","#27ae60",True)]:
+            sub = df_subs[df_subs["Trimestre"] == t]
             if sub.empty:
                 continue
-            row_data = {"Categoría": f"{ALERT_EMOJI[cat]} {cat}"}
-            for s in avail:
-                col = f"{s}_T2"
-                row_data[SUBJECT_LABELS.get(s, s)] = round(sub[col].mean(), 2) if col in sub.columns else None
-            heatmap_rows.append(row_data)
+            activo     = show_map[t]
+            color_real = color if activo else "#cccccc"
+            opac       = 0.9 if activo else 0.3
+            if solid:
+                fig_subs.add_trace(go.Bar(
+                    name=t, x=sub["Materia"], y=sub["Promedio"],
+                    marker_color=color_real, opacity=opac,
+                    text=sub["Promedio"].astype(str),
+                    textposition="outside", textfont=dict(size=9)
+                ))
+            else:
+                fig_subs.add_trace(go.Bar(
+                    name=t, x=sub["Materia"], y=sub["Promedio"],
+                    marker=dict(color=color_real, opacity=opac,
+                                pattern=dict(shape="/", size=6, solidity=0.4,
+                                             fgcolor=color_real, bgcolor="white")),
+                    text=sub["Promedio"].astype(str),
+                    textposition="outside", textfont=dict(size=9)
+                ))
+        fig_subs.add_hline(y=4.0, line_dash="dash", line_color="red", line_width=1.5,
+                            annotation_text="Mín. aprobación (4.0)",
+                            annotation_font_color="red", annotation_font_size=11)
+        fig_subs.update_layout(
+            height=460, barmode="group",
+            xaxis_title="Materia", yaxis_title="Promedio",
+            yaxis=dict(range=[0, 7.8], gridcolor="#f0f0f0"),
+            xaxis=dict(tickangle=-30),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02),
+            plot_bgcolor="white", paper_bgcolor="white",
+            margin=dict(l=40, r=20, t=50, b=80)
+        )
+        st.plotly_chart(fig_subs, use_container_width=True)
 
-        if heatmap_rows:
-            df_heat = pd.DataFrame(heatmap_rows).set_index("Categoría")
-            fig_heat = go.Figure(go.Heatmap(
-                z=df_heat.values,
-                x=df_heat.columns.tolist(),
-                y=df_heat.index.tolist(),
-                colorscale=[[0, "#e74c3c"], [0.5, "#f39c12"], [1, "#2ecc71"]],
-                zmin=1, zmax=7,
-                text=df_heat.values.round(2),
-                texttemplate="%{text}",
-                hovertemplate="Categoría: %{y}<br>Asignatura: %{x}<br>Promedio T2: %{z:.2f}<extra></extra>"
-            ))
-            fig_heat.update_layout(
-                height=280,
-                xaxis=dict(tickangle=-30),
-                margin=dict(l=160, r=20, t=30, b=90)
-            )
-            st.plotly_chart(fig_heat, use_container_width=True)
+    st.divider()
+    st.markdown("#### Materias con promedio acumulado bajo el mínimo")
+    st.caption("Promedio acumulado = T1×0.30 + T2×0.30 + T3×0.40 · Solo muestra materias en riesgo o cerca (< 4.5)")
 
-        # Tabla: materias con más estudiantes bajo mínimo en T2
-        st.markdown("### Materias con más estudiantes bajo el mínimo en T2")
-        bajo_min = []
-        for s in avail:
-            col = f"{s}_T2"
-            if col not in df_g.columns:
-                continue
-            n_bajo = (df_g[col] < 4.0).sum()
-            pct    = round(n_bajo / len(df_g) * 100, 1)
-            avg    = round(df_g[col].mean(), 2)
-            bajo_min.append({
-                "Asignatura": SUBJECT_LABELS.get(s, s),
-                "Bajo mínimo (T2)": n_bajo,
-                "% del grupo": f"{pct}%",
-                "Promedio T2": avg
-            })
-        bajo_min_df = pd.DataFrame(bajo_min).sort_values("Bajo mínimo (T2)", ascending=False)
-        st.dataframe(bajo_min_df, use_container_width=True, hide_index=True)
+    resumen_rows = []
+    for s in SUBJECTS:
+        col_t1s = f"{s}_T1"; col_t2s = f"{s}_T2"
+        col_t3s = f"{s}_T3"; col_t3p = f"{s}_T3_pred"
+        if not all(c in df_filtrado.columns for c in [col_t1s, col_t2s, col_t3s]):
+            continue
+        df_sub = df_filtrado[[col_t1s, col_t2s, col_t3s]].dropna()
+        if df_sub.empty:
+            continue
+        df_sub = df_sub.copy()
+        df_sub["acum"] = df_sub[col_t1s]*0.30 + df_sub[col_t2s]*0.30 + df_sub[col_t3s]*0.40
+        prom_acum = round(df_sub["acum"].mean(), 2)
+        prom_t3p  = round(df_filtrado[col_t3p].mean(), 2) if col_t3p in df_filtrado.columns else None
+        resumen_rows.append({"Materia": SUBJECT_LABELS[s],
+                              "Prom. acumulado": prom_acum, "Prom. T3 pred.": prom_t3p})
+
+    df_res      = pd.DataFrame(resumen_rows)
+    df_res_show = df_res[df_res["Prom. acumulado"] < 4.5].sort_values("Prom. acumulado")
+
+    if not df_res_show.empty:
+        fig_horiz = go.Figure()
+        fig_horiz.add_trace(go.Bar(
+            name="Promedio acumulado",
+            y=df_res_show["Materia"], x=df_res_show["Prom. acumulado"],
+            orientation="h",
+            marker_color=["#e74c3c" if v < 4.0 else "#f39c12"
+                          for v in df_res_show["Prom. acumulado"]],
+            text=df_res_show["Prom. acumulado"].astype(str), textposition="outside"
+        ))
+        fig_horiz.add_trace(go.Scatter(
+            name="T3 predicho (grupo)", y=df_res_show["Materia"],
+            x=df_res_show["Prom. T3 pred."], mode="markers",
+            marker=dict(color="#3498db", size=12, symbol="diamond",
+                        line=dict(width=1.5, color="white"))
+        ))
+        fig_horiz.add_vline(x=4.0, line_dash="dash", line_color="red", line_width=1.5,
+                             annotation_text="4.0 mínimo", annotation_font_color="red",
+                             annotation_position="top right")
+        fig_horiz.update_layout(
+            height=max(200, len(df_res_show)*55+80),
+            xaxis_title="Promedio acumulado",
+            xaxis=dict(range=[0, 7.5], gridcolor="#f0f0f0"),
+            yaxis_title="",
+            legend=dict(orientation="h", yanchor="bottom", y=1.02),
+            plot_bgcolor="white", paper_bgcolor="white",
+            margin=dict(l=10, r=80, t=40, b=40)
+        )
+        st.plotly_chart(fig_horiz, use_container_width=True)
+        st.caption("🔴 Bajo mínimo · 🟠 Cerca del mínimo (< 4.5) · ◆ T3 predicho del grupo")
+    else:
+        st.success("Ninguna materia tiene promedio acumulado bajo o cerca del mínimo en el grupo seleccionado.")
