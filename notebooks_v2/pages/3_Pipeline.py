@@ -18,39 +18,26 @@ with tab1:
     st.caption("Patrón Medallion (Bronze → Trusted → Silver) · Databricks Free Edition · PySpark 4.1.0")
 
     st.markdown("### Flujo del pipeline")
-    cols = st.columns([1, 0.3, 1, 0.3, 1, 0.3, 1, 0.3, 1])
+    cols = st.columns(5)
 
-    def caja(col, emoji, titulo, detalle, color_borde, color_texto):
-        col.markdown(f"""
+    items = [
+        ("🏫", "Phidias",   "Exportación<br>XLS manual",                "#bdc3c7", "#555"),
+        ("🥉", "Bronze",    "XLS raw<br>CSV anon<br>Parquet prep",       "#f39c12", "#e67e22"),
+        ("🥈", "Trusted",   "Dataset train<br>Dataset pred<br>Parquet", "#3498db", "#2980b9"),
+        ("🥇", "Silver",    "EDA · Modelo<br>Alertas · CSV<br>dashboard","#2ecc71", "#27ae60"),
+        ("📊", "Dashboard", "Streamlit<br>Vermont EWS<br>vmt-ews-acad", "#9b59b6", "#8e44ad"),
+    ]
+
+    for i, (emoji, titulo, detalle, color_borde, color_texto) in enumerate(items):
+        flecha = "<div style='text-align:left;font-size:1.2em;color:#aaa;margin-bottom:4px'>→</div>" if i > 0 else ""
+        cols[i].markdown(f"""
+        {flecha}
         <div style="border:2px solid {color_borde};border-radius:10px;
-                    padding:14px 8px;text-align:center;min-height:130px">
-            <div style="font-size:1.6em">{emoji}</div>
-            <div style="font-weight:700;color:{color_texto};margin-top:4px;font-size:0.95em">{titulo}</div>
-            <div style="font-size:0.72em;color:#666;margin-top:4px;line-height:1.5">{detalle}</div>
+                    padding:12px 6px;text-align:center;min-height:140px">
+            <div style="font-size:1.4em">{emoji}</div>
+            <div style="font-weight:700;color:{color_texto};margin-top:4px;font-size:0.88em">{titulo}</div>
+            <div style="font-size:0.68em;color:#666;margin-top:4px;line-height:1.5">{detalle}</div>
         </div>""", unsafe_allow_html=True)
-
-    def flecha(col):
-        col.markdown(
-            "<div style='text-align:center;font-size:1.6em;color:#aaa;padding-top:40px'>→</div>",
-            unsafe_allow_html=True
-        )
-
-    caja(cols[0], "🏫", "Phidias",   "Exportación<br>XLS manual",                "#bdc3c7", "#555")
-    flecha(cols[1])
-    caja(cols[2], "🥉", "Bronze",    "XLS raw<br>CSV anon<br>Parquet prep",       "#f39c12", "#e67e22")
-    flecha(cols[3])
-    caja(cols[4], "🥈", "Trusted",   "Dataset train<br>Dataset pred<br>Parquet", "#3498db", "#2980b9")
-    flecha(cols[5])
-    caja(cols[6], "🥇", "Silver",    "EDA · Modelo<br>Alertas · CSV<br>dashboard","#2ecc71", "#27ae60")
-    flecha(cols[7])
-    def caja(col, emoji, titulo, detalle, color_borde, color_texto):
-        col.markdown(f"""
-        <div style="border:2px solid {color_borde};border-radius:10px;
-                    padding:14px 8px;text-align:center;min-height:130px">
-            <div style="font-size:1.6em">{emoji}</div>
-            <div style="font-weight:700;color:{color_texto};margin-top:4px;font-size:0.95em">{titulo}</div>
-            <div style="font-size:0.72em;color:#666;margin-top:4px;line-height:1.5">{detalle}</div>
-        </div>""", unsafe_allow_html=True)(cols[8], "📊", "Dashboard", "Streamlit<br>Vermont EWS<br>vmt-ews-acad", "#9b59b6", "#8e44ad")
 
     st.divider()
     st.markdown("### Stack tecnológico")
