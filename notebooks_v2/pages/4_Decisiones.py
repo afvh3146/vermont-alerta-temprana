@@ -270,7 +270,6 @@ with tab1:
         })
         st.markdown("**Detalle por materia y categoría**")
         st.dataframe(df_show, use_container_width=True, hide_index=True)
-        )
 
     st.divider()
 
