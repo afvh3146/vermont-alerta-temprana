@@ -30,8 +30,6 @@ ALERT_DESC   = {
 GRADO_LABEL = {7:"7°", 8:"8°", 9:"9°"}
 PAGES = {
     "📊 Visualización": "Semáforo general, detalle por estudiante y análisis por asignatura.",
-    "🤖 Modelo":        "Comparativa de modelos ML, feature importance y predicción T3.",
-    "⚙️ Pipeline":      "Arquitectura de datos, ciclo de vida y flujo del pipeline.",
     "🎯 Decisiones":    "Análisis aclaratorio para toma de decisiones de intervención.",
 }
 
