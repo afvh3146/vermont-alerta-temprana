@@ -38,13 +38,31 @@ ALERT_EMOJI = {
 GRADO_MAP   = {"X": 7, "Y": 8, "Z": 9}
 GRADO_LABEL = {7: "X", 8: "Y", 9: "Z"}
 
+IMPORTANCIA_MODELO = {
+    "Mathematics":          0.0936 + 0.0279,
+    "I_and_S":              0.0504 + 0.0411,
+    "Lengua_Castellana":    0.0327 + 0.0000,
+    "English":              0.0191 + 0.0000,
+    "Mandarin":             0.0218 + 0.0000,
+    "Science":              0.0000,
+    "Financial_Maths":      0.0000,
+    "ICT_STEM":             0.0000,
+    "Physical_Education":   0.0000,
+    "Research_Methodology": 0.0000,
+}
+
+MATERIAS_INGLES = {
+    "Science", "I_and_S", "Mathematics", "English",
+    "Financial_Maths", "ICT_STEM", "Research_Methodology"
+}
+
 @st.cache_data(ttl=3600)
 def load_data():
     df = pd.read_csv(DATA_URL)
-    df["seccion"]   = df["section_anon"].str[-1]
-    df["grado_str"] = df["grade"].map(GRADO_LABEL)
+    df["seccion"]     = df["section_anon"].str[-1]
+    df["grado_str"]   = df["grade"].map(GRADO_LABEL)
     df["grado_label"] = df["grado_str"] + " " + df["seccion"]
-    df["categoria"] = df["categoria"].fillna("Riesgo Teórico")
+    df["categoria"]   = df["categoria"].fillna("Riesgo Teórico")
     return df
 
 df = load_data()
@@ -94,76 +112,124 @@ tab1, tab2 = st.tabs(["📍 ¿Dónde está el riesgo?", "📋 ¿A quién interve
 # ══════════════════════════════════════════════
 with tab1:
 
-    st.markdown("### Materias detonantes vs. acumuladoras")
+    st.markdown("### Materias críticas — impacto real vs. peso en el modelo")
     st.caption(
-        "**Detonante:** materia con más estudiantes bajo 4.0 en T3 real. "
-        "**Acumuladora:** materia cuyo promedio acumulado (T1×0.30 + T2×0.30 + T3×0.40) "
-        "está bajo 4.0."
+        "Ordenado por N° estudiantes con T3 bajo 4.0 · "
+        "La barra naranja muestra la importancia de esa materia en el modelo predictivo"
     )
 
     avail = [s for s in SUBJECTS
-             if f"{s}_T3" in df_g.columns and f"{s}_T1" in df_g.columns and f"{s}_T2" in df_g.columns]
+             if f"{s}_T3" in df_g.columns and f"{s}_T1" in df_g.columns
+             and f"{s}_T2" in df_g.columns]
 
-    det_rows = []
+    mat_rows = []
     for s in avail:
-        # Detonante: bajo 4.0 en T3 real
-        df_t3 = df_g[f"{s}_T3"].dropna()
+        df_t3  = df_g[f"{s}_T3"].dropna()
         n_bajo_t3 = (df_t3 < 4.0).sum()
 
-        # Acumuladora: nota acumulada bajo 4.0
         df_sub = df_g[[f"{s}_T1", f"{s}_T2", f"{s}_T3"]].dropna()
         if not df_sub.empty:
-            acum = df_sub[f"{s}_T1"]*0.30 + df_sub[f"{s}_T2"]*0.30 + df_sub[f"{s}_T3"]*0.40
+            acum = (df_sub[f"{s}_T1"]*0.30 +
+                    df_sub[f"{s}_T2"]*0.30 +
+                    df_sub[f"{s}_T3"]*0.40)
             n_acum_riesgo = (acum < 4.0).sum()
-            prom_acum = round(acum.mean(), 2)
+            prom_acum     = round(acum.mean(), 2)
         else:
             n_acum_riesgo = 0
-            prom_acum = None
+            prom_acum     = None
 
         pct_t3 = round(n_bajo_t3 / len(df_g) * 100, 1) if len(df_g) > 0 else 0
+        imp    = IMPORTANCIA_MODELO.get(s, 0.0)
 
-        det_rows.append({
+        mat_rows.append({
             "Materia":         SUBJECT_LABELS[s],
-            "Bajo 4.0 en T3":  n_bajo_t3,
+            "Bajo 4.0 en T3":  int(n_bajo_t3),
             "% grupo":         f"{pct_t3}%",
-            "Acum. en riesgo": n_acum_riesgo,
+            "Acum. en riesgo": int(n_acum_riesgo),
             "Prom. acumulado": prom_acum,
+            "Importancia":     round(imp, 4),
+            "En inglés":       s in MATERIAS_INGLES,
+            "_s":              s,
         })
 
-    df_det = pd.DataFrame(det_rows).sort_values("Bajo 4.0 en T3", ascending=False)
+    df_det = pd.DataFrame(mat_rows).sort_values("Bajo 4.0 en T3", ascending=False)
 
     if df_det.empty:
         st.info("No hay datos de T3 disponibles para el grupo seleccionado.")
     else:
+        mostrar_ingles = st.checkbox(
+            "🔵 Resaltar materias dictadas en inglés", value=False
+        )
+
+        colores_barra = [
+            "#1a5276" if (mostrar_ingles and row["En inglés"]) else "#e74c3c"
+            for _, row in df_det.iterrows()
+        ]
+
+        max_imp = df_det["Importancia"].max()
+        max_n   = df_det["Bajo 4.0 en T3"].max()
+        imp_escalada = (
+            df_det["Importancia"] / max_imp * max_n * 0.6
+            if max_imp > 0 else df_det["Importancia"]
+        )
+
         fig_det = go.Figure()
         fig_det.add_trace(go.Bar(
-            name="Bajo 4.0 en T3 (detonante)",
+            name="Bajo 4.0 en T3",
             x=df_det["Materia"],
             y=df_det["Bajo 4.0 en T3"],
-            marker_color="#e74c3c",
+            marker_color=colores_barra,
             text=df_det["Bajo 4.0 en T3"],
-            textposition="outside"
+            textposition="outside",
+            opacity=0.9
         ))
         fig_det.add_trace(go.Bar(
-            name="Acumulado en riesgo",
+            name="Peso en el modelo (relativo)",
             x=df_det["Materia"],
-            y=df_det["Acum. en riesgo"],
+            y=imp_escalada,
             marker_color="#f39c12",
-            text=df_det["Acum. en riesgo"],
-            textposition="outside"
+            opacity=0.7,
+            text=df_det["Importancia"].apply(
+                lambda x: f"imp: {x:.3f}" if x > 0 else ""
+            ),
+            textposition="outside",
+            textfont=dict(size=9, color="#e67e22")
         ))
         fig_det.update_layout(
-            barmode="group", height=380,
+            barmode="overlay", height=400,
             xaxis=dict(tickangle=-30, gridcolor="#f0f0f0"),
             yaxis=dict(title="N° estudiantes", gridcolor="#f0f0f0"),
             legend=dict(orientation="h", yanchor="bottom", y=1.02),
             plot_bgcolor="white", paper_bgcolor="white",
             margin=dict(l=40, r=20, t=50, b=90)
         )
+        if mostrar_ingles:
+            fig_det.add_annotation(
+                x=0.01, y=1.10, xref="paper", yref="paper",
+                text="🔵 Azul = en inglés · 🔴 Rojo = en español",
+                showarrow=False, font=dict(size=11, color="#555"),
+                align="left"
+            )
+
         st.plotly_chart(fig_det, use_container_width=True)
 
+        st.markdown("""
+        <div style="background:#fff8e1;border-left:4px solid #f39c12;
+                    padding:10px 14px;border-radius:6px;margin-bottom:12px;font-size:0.87em">
+            <b>Cómo leer esta gráfica:</b> La barra roja/azul muestra cuántos estudiantes
+            tienen T3 bajo 4.0 — impacto operativo hoy.
+            La barra naranja muestra el peso de esa materia en el modelo predictivo —
+            qué tan determinante es para predecir riesgo de perder el año.<br><br>
+            <b>Materias con ambas barras altas</b> son donde concentrar recursos:
+            el modelo lo confirma y los datos lo muestran.
+        </div>
+        """, unsafe_allow_html=True)
+
         st.markdown("**Detalle por materia**")
-        st.dataframe(df_det, use_container_width=True, hide_index=True)
+        st.dataframe(
+            df_det.drop(columns=["En inglés", "_s"]),
+            use_container_width=True, hide_index=True
+        )
 
     st.divider()
 
@@ -172,7 +238,6 @@ with tab1:
     st.caption("Categorías de riesgo activo: Riesgo Confirmado + Punto Ciego")
 
     if grado_sel == "Todos":
-        # Mostrar por grado cuando no hay filtro de grado
         riesgo_grado = (
             df_g[df_g["categoria"].isin(["Riesgo Confirmado", "Punto Ciego"])]
             .groupby(["grado_str", "categoria"])
@@ -235,7 +300,6 @@ with tab1:
 # ══════════════════════════════════════════════
 with tab2:
 
-    # ── Datos base ─────────────────────────────
     df_gain = df_g.copy()
     df_gain["es_riesgo"] = df_gain["categoria"].isin(
         ["Riesgo Confirmado", "Punto Ciego"]
@@ -251,11 +315,9 @@ with tab2:
     total_teorico    = int((df_g["categoria"] == "Riesgo Teórico").sum())
     total_da_max     = total_confirmado + total_ciego
 
-    # Grupos reales: combinación grado + sección
     df_g["grupo"] = df_g["grado_str"].astype(str) + "-" + df_g["seccion"].astype(str)
     grupos = sorted(df_g["grupo"].unique().tolist())
 
-    # ── Resumen global ─────────────────────────
     st.markdown("### Eficiencia del modelo — curva de ganancia")
     st.caption(f"Middle School · {len(df_g)} estudiantes · {total_riesgo + total_teorico} en riesgo activo")
 
@@ -270,16 +332,12 @@ with tab2:
     c1, c2, c3, c4 = st.columns(4)
     c1.metric("En riesgo activo", total_riesgo + total_teorico,
               delta=f"{total_confirmado} confirmados · {total_teorico} teóricos")
-    c2.metric("Para cubrir 80% con modelo", f"~{n_modelo_80}",
-              delta="estudiantes")
-    c3.metric("Para cubrir 80% al azar", f"~{n_azar_80}",
-              delta="estudiantes")
-    c4.metric("Ganancia del modelo", f"{ganancia}×",
-              delta="más eficiente que el azar")
+    c2.metric("Para cubrir 80% con modelo", f"~{n_modelo_80}", delta="estudiantes")
+    c3.metric("Para cubrir 80% al azar", f"~{n_azar_80}", delta="estudiantes")
+    c4.metric("Ganancia del modelo", f"{ganancia}×", delta="más eficiente que el azar")
 
     st.divider()
 
-    # ── Slider DA ──────────────────────────────
     st.markdown("**🔴🟠 Director Académico**")
     st.caption("Atiende Riesgo Confirmado y Punto Ciego — prioridad máxima")
 
@@ -290,24 +348,21 @@ with tab2:
         key="slider_da"
     )
 
-    # Pool DA y desbordados
     df_da_pool = df_g[df_g["categoria"].isin(["Riesgo Confirmado","Punto Ciego"])]\
                  .sort_values("proba_critical", ascending=False).reset_index(drop=True)
-    df_da         = df_da_pool.head(cap_da).copy()
+    df_da          = df_da_pool.head(cap_da).copy()
     df_desbordados = df_da_pool.iloc[cap_da:].copy() \
                      if cap_da < len(df_da_pool) else pd.DataFrame()
 
-    # Total HRT desde session state
     total_hrt_interv = sum([
         st.session_state.get(f"slider_hrt_{grupo}", 0)
         for grupo in grupos
     ])
-    total_interv     = cap_da + total_hrt_interv
-    pct_da_cub       = round(cap_da / max(total_da_max, 1) * 100, 1)
-    pct_hrt_cub      = round(total_hrt_interv / max(total_teorico, 1) * 100, 1)
-    sin_cubrir       = max(0, (total_da_max - cap_da) + (total_teorico - total_hrt_interv))
+    total_interv = cap_da + total_hrt_interv
+    pct_da_cub   = round(cap_da / max(total_da_max, 1) * 100, 1)
+    pct_hrt_cub  = round(total_hrt_interv / max(total_teorico, 1) * 100, 1)
+    sin_cubrir   = max(0, (total_da_max - cap_da) + (total_teorico - total_hrt_interv))
 
-    # ── Métricas globales ──────────────────────
     st.divider()
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Total intervenidos", total_interv)
@@ -317,7 +372,6 @@ with tab2:
               delta=f"{total_hrt_interv} de {total_teorico}")
     m4.metric("En riesgo sin cubrir", sin_cubrir)
 
-    # ── Curva con líneas verticales ────────────
     fig_gain = go.Figure()
     fig_gain.add_trace(go.Scatter(
         x=df_gain["rank"], y=df_gain["gain_pct"],
@@ -335,7 +389,6 @@ with tab2:
         line=dict(color="#2ecc71", dash="dot", width=1.5)
     ))
 
-    # Línea vertical DA
     pct_da_curva = float(df_gain[df_gain["rank"] == max(cap_da, 1)]["gain_pct"].values[0]) \
                    if 0 < cap_da <= len(df_gain) else 0.0
     if cap_da > 0:
@@ -346,7 +399,6 @@ with tab2:
             annotation_font_color="#e74c3c", annotation_font_size=11
         )
 
-    # Línea vertical DA + HRT
     rank_total      = min(total_interv, len(df_gain))
     pct_total_curva = float(df_gain[df_gain["rank"] == max(rank_total, 1)]["gain_pct"].values[0]) \
                       if rank_total > 0 else 0.0
@@ -376,7 +428,6 @@ with tab2:
         Sin el modelo necesitarías intervenir ~{n_azar_80} estudiantes para cubrir el 80%.
     </div>""", unsafe_allow_html=True)
 
-    # ── Lista DA ──────────────────────────────
     st.divider()
     st.markdown(f"**Lista DA — top {cap_da} estudiantes**")
     if df_da.empty:
@@ -394,7 +445,6 @@ with tab2:
         })
         st.dataframe(df_da_show, use_container_width=True, hide_index=True)
 
-    # ── Sliders y listas HRT ───────────────────
     st.divider()
     st.markdown("**🔵 Directores de grupo (HRT)**")
     st.caption("Cada HRT atiende primero los desbordados del DA de su sección, luego sus teóricos")
