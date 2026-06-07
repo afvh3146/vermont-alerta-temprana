@@ -259,7 +259,7 @@ with tab1:
                             lambda x: f"{x:.3f}" if x > 0 else ""
                         ),
                         textposition="top center",
-                        textfont=dict(size=9, color="#e67e22"),
+                        textfont=dict(size=9, color="#1a5276"),
                         hovertemplate="<b>%{x}</b><br>Importancia: %{customdata:.3f}<extra></extra>",
                         customdata=df_mat["Importancia"]
                     ))
