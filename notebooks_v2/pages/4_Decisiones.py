@@ -164,7 +164,7 @@ with tab1:
         )
     with col_c5:
         mostrar_ingles = st.checkbox(
-            "🔵 Inglés", value=False, key="mat_ingles"
+            "🇬🇧 Inglés", value=False, key="mat_ingles"
         )
 
     cats_activas = []
