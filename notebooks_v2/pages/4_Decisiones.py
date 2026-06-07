@@ -139,9 +139,9 @@ with tab1:
         "Research_Methodology": 0.0,
     }
 
-    # ── Filtros como checkboxes ───────────────
+    # ── Checkboxes de categoría ───────────────
     st.markdown("**Mostrar estudiantes de:**")
-    col_c1, col_c2, col_c3, col_c4, col_c5 = st.columns([1, 1, 1, 1, 1])
+    col_c1, col_c2, col_c3, col_c4 = st.columns(4)
     with col_c1:
         show_confirmado = st.checkbox(
             f"{ALERT_EMOJI['Riesgo Confirmado']} Confirmado", value=True,
@@ -162,10 +162,6 @@ with tab1:
             f"{ALERT_EMOJI['Sin Riesgo']} Sin Riesgo", value=False,
             key="mat_sinriesgo"
         )
-    with col_c5:
-        mostrar_ingles = st.checkbox(
-            "🇬🇧 Inglés", value=False, key="mat_ingles"
-        )
 
     cats_activas = []
     if show_confirmado: cats_activas.append("Riesgo Confirmado")
@@ -176,7 +172,6 @@ with tab1:
     if not cats_activas:
         st.info("Selecciona al menos una categoría.")
     else:
-        # Filtrar solo estudiantes de las categorías activas
         df_filtro_cat = df_g[df_g["categoria"].isin(cats_activas)]
 
         mat_rows = []
@@ -187,6 +182,7 @@ with tab1:
                 continue
             mat_rows.append({
                 "Materia":     SUBJECT_LABELS[s],
+                "_s":          s,
                 "N bajo T3":   n_bajo,
                 "Importancia": IMPORTANCIA_MODELO.get(s, 0.0),
                 "En inglés":   s in MATERIAS_INGLES,
@@ -197,66 +193,101 @@ with tab1:
         if not mat_rows:
             st.info("No hay estudiantes con T3 bajo 4.0 en las categorías seleccionadas.")
         else:
-            df_mat = pd.DataFrame(mat_rows).sort_values("N bajo T3", ascending=False)
+            df_mat = pd.DataFrame(mat_rows)
+
+            # ── Columna izquierda: gráfico | Columna derecha: filtros ──
+            col_chart, col_filtros = st.columns([4, 1])
+
+            with col_filtros:
+                st.markdown("&nbsp;")
+                mostrar_ingles = st.checkbox(
+                    "Resaltar materias en inglés", value=False,
+                    key="mat_ingles"
+                )
+                st.caption("Materias dictadas en inglés se muestran en azul.")
+
+                st.markdown("&nbsp;")
+                ordenar_imp = st.checkbox(
+                    "Ordenar por importancia en el modelo", value=False,
+                    key="mat_orden_imp"
+                )
+                st.caption(
+                    "Importancia Gini: qué tanto predice cada materia "
+                    "el riesgo de perder el año. "
+                    "Rango: 0.000 (no predice) → 0.122 (Mathematics, mayor predictor)."
+                )
+
+            # Ordenar según filtro
+            if ordenar_imp:
+                df_mat = df_mat.sort_values("Importancia", ascending=False)
+            else:
+                df_mat = df_mat.sort_values("N bajo T3", ascending=False)
 
             colores = [
                 "#1a5276" if (mostrar_ingles and row["En inglés"]) else "#e74c3c"
                 for _, row in df_mat.iterrows()
             ]
 
-            fig_mat = go.Figure()
-            fig_mat.add_trace(go.Bar(
-                name="Bajo 4.0 en T3",
-                x=df_mat["Materia"],
-                y=df_mat["N bajo T3"],
-                marker_color=colores,
-                text=df_mat["N bajo T3"],
-                textposition="outside",
-                opacity=0.9,
-                hovertemplate="<b>%{x}</b><br>Estudiantes: %{y}<extra></extra>"
-            ))
-
-            max_n   = df_mat["N bajo T3"].max()
-            max_imp = df_mat["Importancia"].max()
-            if max_imp > 0:
-                imp_escalada = df_mat["Importancia"] / max_imp * max_n * 0.85
-                fig_mat.add_trace(go.Scatter(
-                    name="Importancia en el modelo",
+            with col_chart:
+                fig_mat = go.Figure()
+                fig_mat.add_trace(go.Bar(
+                    name="Bajo 4.0 en T3",
                     x=df_mat["Materia"],
-                    y=imp_escalada,
-                    mode="markers",
-                    marker=dict(
-                        symbol="diamond", size=12,
-                        color="#f39c12",
-                        line=dict(width=1.5, color="#e67e22")
-                    ),
-                    hovertemplate="<b>%{x}</b><br>Importancia modelo: %{customdata:.3f}<extra></extra>",
-                    customdata=df_mat["Importancia"]
+                    y=df_mat["N bajo T3"],
+                    marker_color=colores,
+                    text=df_mat["N bajo T3"],
+                    textposition="outside",
+                    opacity=0.9,
+                    hovertemplate="<b>%{x}</b><br>Estudiantes: %{y}<extra></extra>"
                 ))
 
-            if mostrar_ingles:
-                fig_mat.add_annotation(
-                    x=0.01, y=1.10, xref="paper", yref="paper",
-                    text="🔵 Azul = dictada en inglés · 🔴 Rojo = dictada en español",
-                    showarrow=False, font=dict(size=11, color="#555"), align="left"
+                max_n   = df_mat["N bajo T3"].max()
+                max_imp = df_mat["Importancia"].max()
+                if max_imp > 0:
+                    imp_escalada = df_mat["Importancia"] / max_imp * max_n * 0.85
+                    fig_mat.add_trace(go.Scatter(
+                        name="Importancia en el modelo",
+                        x=df_mat["Materia"],
+                        y=imp_escalada,
+                        mode="markers+text",
+                        marker=dict(
+                            symbol="diamond", size=12,
+                            color="#f39c12",
+                            line=dict(width=1.5, color="#e67e22")
+                        ),
+                        text=df_mat["Importancia"].apply(
+                            lambda x: f"{x:.3f}" if x > 0 else ""
+                        ),
+                        textposition="top center",
+                        textfont=dict(size=9, color="#e67e22"),
+                        hovertemplate="<b>%{x}</b><br>Importancia: %{customdata:.3f}<extra></extra>",
+                        customdata=df_mat["Importancia"]
+                    ))
+
+                if mostrar_ingles:
+                    fig_mat.add_annotation(
+                        x=0.01, y=1.12, xref="paper", yref="paper",
+                        text="🔵 Azul = inglés · 🔴 Rojo = español",
+                        showarrow=False, font=dict(size=10, color="#555"),
+                        align="left"
+                    )
+
+                fig_mat.update_layout(
+                    height=400,
+                    xaxis=dict(tickangle=-30, gridcolor="#f0f0f0"),
+                    yaxis=dict(title="N° estudiantes", gridcolor="#f0f0f0"),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02),
+                    plot_bgcolor="white", paper_bgcolor="white",
+                    margin=dict(l=40, r=20, t=60, b=90),
+                    hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="#ddd")
+                )
+                st.plotly_chart(fig_mat, use_container_width=True)
+                st.caption(
+                    "◆ Diamante naranja = importancia Gini de la materia en el modelo "
+                    "(qué tanto predice el riesgo de perder el año)"
                 )
 
-            fig_mat.update_layout(
-                height=400,
-                xaxis=dict(tickangle=-30, gridcolor="#f0f0f0"),
-                yaxis=dict(title="N° estudiantes", gridcolor="#f0f0f0"),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02),
-                plot_bgcolor="white", paper_bgcolor="white",
-                margin=dict(l=40, r=20, t=50, b=90),
-                hoverlabel=dict(bgcolor="white", font_size=12, bordercolor="#ddd")
-            )
-            st.plotly_chart(fig_mat, use_container_width=True)
-            st.caption(
-                "◆ Diamante naranja = importancia de la materia en el modelo predictivo · "
-                "🔵 Azul = dictada en inglés (cuando está activo el filtro)"
-            )
-
-            # ── Tabla original ────────────────
+            # ── Tabla ─────────────────────────
             st.markdown("**Detalle por materia**")
             det_rows = []
             for s in avail:
@@ -267,19 +298,19 @@ with tab1:
                     acum = (df_sub[f"{s}_T1"]*0.30 +
                             df_sub[f"{s}_T2"]*0.30 +
                             df_sub[col_t3]*0.40)
-                    n_acum = int((acum < 4.0).sum())
+                    n_acum    = int((acum < 4.0).sum())
                     prom_acum = round(acum.mean(), 2)
                 else:
-                    n_acum = 0
-                    prom_acum = None
+                    n_acum = 0; prom_acum = None
                 pct = round(n_bajo / len(df_filtro_cat) * 100, 1) \
                       if len(df_filtro_cat) > 0 else 0
                 det_rows.append({
-                    "Materia":         SUBJECT_LABELS[s],
-                    "Bajo 4.0 en T3":  n_bajo,
+                    "Materia":          SUBJECT_LABELS[s],
+                    "Bajo 4.0 en T3":   n_bajo,
                     "% grupo filtrado": f"{pct}%",
-                    "Acum. en riesgo": n_acum,
-                    "Prom. acumulado": prom_acum,
+                    "Acum. en riesgo":  n_acum,
+                    "Prom. acumulado":  prom_acum,
+                    "Imp. modelo":      IMPORTANCIA_MODELO.get(s, 0.0),
                 })
             df_det = pd.DataFrame(det_rows).sort_values(
                 "Bajo 4.0 en T3", ascending=False
